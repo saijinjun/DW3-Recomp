@@ -1,0 +1,346 @@
+// Emitter output checks that do not execute the generated code (see test_emitter.cpp for that).
+
+#include <gtest/gtest.h>
+
+#include "mips_asm.h"
+#include "psxrecomp/analysis.h"
+#include "psxrecomp/emitter.h"
+
+using namespace psxrecomp;
+using namespace masm;
+
+namespace {
+
+constexpr uint32_t kBase = 0x80010000;
+
+// Analyses `p` with a single entry at its base and returns the emitted entry function.
+std::string emit_entry(const Program& p, std::vector<std::string>* warnings = nullptr, bool cycles = true) {
+    static CodeSegment seg;  // EmitContext holds pointers; keep them alive for the call only
+    seg = p.segment("TXT");
+    AnalysisConfig cfg;
+    cfg.entries = {p.base()};
+    cfg.scan_data_pointers = false;
+    cfg.scan_jal_words = false;
+    cfg.gap_fill = false;
+    AnalysisResult r = analyze(seg, cfg);
+    EmitContext ec;
+    ec.seg = &seg;
+    ec.local = &r.functions;
+    ec.cycle_counting = cycles;
+    return emit_function(ec, r.functions.at(p.base()), warnings);
+}
+
+bool contains(const std::string& s, const char* needle) { return s.find(needle) != std::string::npos; }
+
+}  // namespace
+
+TEST(EmitterText, NopEmitsNothing) {
+    Program p(kBase);
+    p.emit({nop(), nop(), addiu(v0, zero, 1), nop(), jr(ra), nop()});
+    std::string c = emit_entry(p, nullptr, false);
+    EXPECT_EQ(c, "void f_TXT_80010000(RecompContext* ctx) {\n    ctx->r[2] = 0x00000001u;\n    return;\n}\n");
+}
+
+TEST(EmitterText, WritesToZeroEmitNothing) {
+    Program p(kBase);
+    p.emit({addu(zero, t0, t1), addiu(zero, zero, 5), lui(zero, 0x1234), sll(zero, t0, 2), mflo(zero), slt(zero, t0, t1),
+            jr(ra), nop()});
+    std::string c = emit_entry(p, nullptr, false);
+    EXPECT_FALSE(contains(c, "ctx->r[0]"));
+    EXPECT_FALSE(contains(c, "0x12340000"));
+}
+
+TEST(EmitterText, LoadIntoZeroKeepsTheAccess) {
+    Program p(kBase);
+    p.emit({lw(zero, 0, a0), jr(ra), nop()});
+    std::string c = emit_entry(p, nullptr, false);
+    EXPECT_TRUE(contains(c, "(void)dw3_read32(ctx, ctx->r[4])"));
+    EXPECT_FALSE(contains(c, "ctx->r[0]"));
+}
+
+TEST(EmitterText, LabelsOnlyWhereNeeded) {
+    Program straight(kBase);
+    straight.emit({addiu(v0, zero, 1), addiu(v1, zero, 2), jr(ra), nop()});
+    EXPECT_FALSE(contains(emit_entry(straight), "L_"));
+
+    Program branchy(kBase);
+    branchy.emit({beqz(a0, 2), nop(), addiu(v0, zero, 1), addiu(v1, zero, 2), jr(ra), nop()});
+    std::string c = emit_entry(branchy);
+    EXPECT_TRUE(contains(c, "goto L_8001000C;"));
+    EXPECT_TRUE(contains(c, "L_8001000C:;"));
+    EXPECT_FALSE(contains(c, "L_80010008"));  // fallthrough instruction is not a target
+}
+
+TEST(EmitterText, BackwardJumpChecksEvents) {
+    Program p(kBase);
+    p.emit({addiu(t0, t0, -1), bnez(t0, -2), nop(), jr(ra), nop()});
+    EXPECT_TRUE(contains(emit_entry(p, nullptr, true), "DW3_CHECK_EVENTS(ctx, 0x80010000u); goto L_80010000;"));
+    std::string off = emit_entry(p, nullptr, false);
+    EXPECT_FALSE(contains(off, "DW3_CHECK_EVENTS"));
+    EXPECT_FALSE(contains(off, "ctx->cycles"));
+}
+
+TEST(EmitterText, CycleCountingFlushesAtBlockEnds) {
+    Program p(kBase);
+    p.emit({addiu(v0, zero, 1), addiu(v1, zero, 2), jr(ra), nop()});
+    // 2 ALU + jr + delay slot = 4 cycles, flushed before the return.
+    EXPECT_TRUE(contains(emit_entry(p), "ctx->cycles += 4;"));
+}
+
+TEST(EmitterText, JalWritesLinkBeforeDelaySlotAndCalls) {
+    Program p(kBase);
+    p.emit({jal(kBase + 0x40), move(s0, ra), jr(ra), nop()});
+    std::string c = emit_entry(p, nullptr, false);
+    size_t link = c.find("ctx->r[31] = 0x80010008u;");
+    size_t ds = c.find("ctx->r[16] = ctx->r[31] + ctx->r[0]") == std::string::npos ? c.find("ctx->r[16]") : 0;
+    size_t call = c.find("dw3_call(ctx, 0x80010040u);");
+    EXPECT_NE(link, std::string::npos);
+    EXPECT_NE(call, std::string::npos);
+    EXPECT_LT(link, ds);
+    EXPECT_LT(ds, call);
+}
+
+TEST(EmitterText, LoadDelayHazardIsReportedAndModelled) {
+    Program p(kBase);
+    p.emit({lw(t0, 0, a0), addu(t1, t0, t0), jr(ra), nop()});
+    std::vector<std::string> warnings;
+    std::string c = emit_entry(p, &warnings, false);
+    EXPECT_TRUE(contains(c, "uint32_t ld = dw3_read32"));
+    EXPECT_TRUE(contains(c, "ctx->r[8] = ld;"));
+    ASSERT_EQ(warnings.size(), 1u);
+    EXPECT_TRUE(contains(warnings[0], "load-delay hazard at 80010000"));
+}
+
+TEST(EmitterText, NoHazardWhenNextInstructionDoesNotReadTheRegister) {
+    Program p(kBase);
+    p.emit({lw(t0, 0, a0), addu(t1, t2, t3), addu(t4, t0, t0), jr(ra), nop()});
+    std::vector<std::string> warnings;
+    std::string c = emit_entry(p, &warnings, false);
+    EXPECT_FALSE(contains(c, "uint32_t ld"));
+    EXPECT_TRUE(warnings.empty());
+}
+
+TEST(EmitterText, LwlLwrForwardingIsNotAHazard) {
+    Program p(kBase);
+    p.emit({lwl(t0, 3, a0), lwr(t0, 0, a0), nop(), jr(ra), nop()});
+    std::vector<std::string> warnings;
+    emit_entry(p, &warnings, false);
+    EXPECT_TRUE(warnings.empty());
+}
+
+TEST(EmitterText, BiosStubCallsBiosDispatch) {
+    // li t2,0xA0 ; jr t2 ; li t1,0x3C
+    Program p(kBase);
+    p.emit({li(t2, 0xA0), jr(t2), li(t1, 0x3C)});
+    std::string c = emit_entry(p);
+    EXPECT_TRUE(contains(c, "dw3_bios_call(ctx, 0xA0u, 0x3Cu);"));
+    EXPECT_TRUE(contains(c, "ctx->r[10] = 0xA0u;"));
+    EXPECT_TRUE(contains(c, "ctx->r[9] = 0x3Cu;"));
+    EXPECT_FALSE(contains(c, "return;"));  // falls off the end of the C function: the stub body is the call
+}
+
+TEST(EmitterText, ExternalCallGoesThroughLookup) {
+    Program p(kBase);
+    p.emit({jal(0x80200000), nop(), jr(ra), nop()});
+    EXPECT_TRUE(contains(emit_entry(p, nullptr, false), "dw3_call(ctx, 0x80200000u);"));
+}
+
+TEST(EmitterText, IndirectJumpAndCallUseLookup) {
+    Program p(kBase);
+    p.emit({jalr(t9), nop(), jr(t0), nop()});
+    std::string c = emit_entry(p, nullptr, false);
+    EXPECT_TRUE(contains(c, "dw3_call(ctx, t); }"));
+    EXPECT_TRUE(contains(c, "dw3_call(ctx, t); return; }"));
+}
+
+TEST(EmitterText, CallReturnPointsAreResumeLabelsAndTailCallsAreNot) {
+    Program p(kBase);
+    p.emit({jal(kBase + 0x40), nop(), j(kBase + 0x80), nop()});
+    std::string c = emit_entry(p, nullptr, false);
+    EXPECT_TRUE(contains(c, "dw3_call(ctx, 0x80010040u);"));
+    // The return point is a resume label; the tail jump is a plain call and return.
+    EXPECT_TRUE(contains(c, "case 0x80010008u: goto L_80010008;"));
+    EXPECT_TRUE(contains(c, "L_80010008:;"));
+    EXPECT_TRUE(contains(c, "dw3_call(ctx, 0x80010080u); return;"));
+    EXPECT_FALSE(contains(c, "L_80010010"));  // nothing returns to a tail jump
+}
+
+TEST(EmitterText, BackwardJumpTargetIsAResumePoint) {
+    Program p(kBase);
+    p.emit({addiu(t0, t0, -1), bnez(t0, -2), nop(), jr(ra), nop()});
+    std::string c = emit_entry(p, nullptr, true);
+    EXPECT_TRUE(contains(c, "case 0x80010000u: goto L_80010000;"));
+}
+
+TEST(EmitterText, FunctionsWithoutCallsOrLoopsHaveNoResumeDispatch) {
+    Program p(kBase);
+    p.emit({addiu(v0, zero, 1), jr(ra), nop()});
+    EXPECT_FALSE(contains(emit_entry(p), "ctx->resume"));
+}
+
+TEST(EmitterText, ChainedLoadsKeepBothDelaySlots) {
+    // lw t0 ; lw t1,0(t0) ; addu t2,t1,t1 : the addu must see the OLD t1, and the second load the OLD t0.
+    Program p(kBase);
+    p.emit({lw(t0, 0, a0), lw(t1, 0, t0), addu(t2, t1, t1), jr(ra), nop()});
+    std::string c = emit_entry(p, nullptr, false);
+    EXPECT_TRUE(contains(c, "uint32_t ld2 = "));
+    EXPECT_LT(c.find("ctx->r[10] = ctx->r[9] + ctx->r[9];"), c.find("ctx->r[9] = ld2;"));
+    EXPECT_LT(c.find("uint32_t ld2 = dw3_read32(ctx, ctx->r[8])"), c.find("ctx->r[8] = ld;"));
+}
+
+namespace {
+
+struct Analysed {
+    CodeSegment seg;
+    AnalysisResult res;
+};
+
+Analysed analyse_overlay(const char* name, std::initializer_list<uint32_t> words) {
+    Analysed a;
+    Program p(kBase);
+    p.emit(words);
+    a.seg = p.segment(name);
+    AnalysisConfig cfg;
+    cfg.entries = {kBase};
+    cfg.scan_data_pointers = false;
+    cfg.scan_jal_words = false;
+    cfg.gap_fill = false;
+    a.res = analyze(a.seg, cfg);
+    return a;
+}
+
+}  // namespace
+
+TEST(EmitterText, TablesSeparateOverlaysThatShareTheirFirstWords) {
+    // Same prologue, different bodies: the spread probes (first words of each function) agree, so the table
+    // must add a word from the body and a hash over the code ranges.
+    Analysed main = analyse_overlay("MAIN", {jr(ra), nop()});
+    Analysed a = analyse_overlay("OVA", {addiu(sp, sp, -8), li(v0, 1), li(v1, 5), jr(ra), addiu(sp, sp, 8)});
+    Analysed b = analyse_overlay("OVB", {addiu(sp, sp, -8), li(v0, 1), li(v1, 6), jr(ra), addiu(sp, sp, 8)});
+    main.seg.base = kBase - 0x1000;
+    std::vector<TableSegment> ts = {{&main.seg, &main.res.functions}, {&a.seg, &a.res.functions},
+                                    {&b.seg, &b.res.functions}};
+    std::vector<std::string> warnings;
+    std::string text = emit_tables(ts, &warnings).text;
+    EXPECT_TRUE(warnings.empty());
+    EXPECT_TRUE(contains(text, "static const RecompRange ranges_OVA[]"));
+    EXPECT_TRUE(contains(text, "{0x80010008u, 0x24030005u}"));  // li v1,5 tells OVA from OVB
+    EXPECT_TRUE(contains(text, "{0x80010008u, 0x24030006u}"));
+}
+
+TEST(EmitterText, OverlaysWithIdenticalCodeShareIt) {
+    Analysed main = analyse_overlay("MAIN", {jr(ra), nop()});
+    Analysed a = analyse_overlay("OVA", {li(v0, 1), jr(ra), nop()});
+    Analysed b = analyse_overlay("OVB", {li(v0, 1), jr(ra), nop()});
+    main.seg.base = kBase - 0x1000;
+    std::vector<TableSegment> ts = {{&main.seg, &main.res.functions}, {&a.seg, &a.res.functions},
+                                    {&b.seg, &b.res.functions}};
+    std::vector<std::string> warnings;
+    emit_tables(ts, &warnings);
+    EXPECT_TRUE(warnings.empty());
+    SlotRelations rel = analyze_slots(ts);
+    EXPECT_TRUE(rel.ambiguous.empty());
+    EXPECT_TRUE(rel.stale_if[1].empty() && rel.stale_if[2].empty());
+}
+
+TEST(EmitterText, SharedCodeWithMissingFunctionsIsAmbiguous) {
+    // OVB is the larger image and has the same words as OVA, but OVA's second function is unknown to OVB's
+    // analysis: picking OVB for an OVA load would lose it.
+    Program pa(kBase);
+    pa.emit({jal(kBase + 16), nop(), jr(ra), nop(), li(v0, 1), jr(ra), nop()});
+    Program pb(kBase);
+    pb.emit({jal(kBase + 16), nop(), jr(ra), nop(), li(v0, 1), jr(ra), nop(), nop(), nop()});
+    CodeSegment main = Program(kBase - 0x1000).segment("MAIN"), sa = pa.segment("OVA"), sb = pb.segment("OVB");
+    AnalysisConfig ca, cb;
+    ca.entries = cb.entries = {kBase};
+    ca.scan_data_pointers = cb.scan_data_pointers = ca.scan_jal_words = cb.scan_jal_words = false;
+    ca.gap_fill = cb.gap_fill = false;
+    cb.not_functions = {kBase + 16};
+    AnalysisResult ra = analyze(sa, ca), rb = analyze(sb, cb);
+    ASSERT_TRUE(ra.functions.count(kBase + 16));
+    ASSERT_FALSE(rb.functions.count(kBase + 16));
+    AnalysisResult rm;
+    std::vector<TableSegment> ts = {{&main, &rm.functions}, {&sa, &ra.functions}, {&sb, &rb.functions}};
+    SlotRelations rel = analyze_slots(ts);
+    EXPECT_EQ(rel.ambiguous.size(), 1u);
+}
+
+TEST(EmitterText, SmallOverlayRefutesLeftoverTailOfLargerOne) {
+    // OVB keeps its code beyond OVA's end; OVA's code sits where OVB has other words, so OVA being in RAM means
+    // OVB is only what is left of an earlier load.
+    Analysed main = analyse_overlay("MAIN", {jr(ra), nop()});
+    Analysed a = analyse_overlay("OVA", {li(v0, 1), jr(ra), nop()});
+    Program pb(kBase);
+    pb.emit({0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u, li(v0, 2), jr(ra), nop()});
+    CodeSegment sb = pb.segment("OVB");
+    AnalysisConfig cb;
+    cb.entries = {kBase + 16};
+    cb.scan_data_pointers = cb.scan_jal_words = cb.gap_fill = false;
+    AnalysisResult rb = analyze(sb, cb);
+    main.seg.base = kBase - 0x1000;
+    std::vector<TableSegment> ts = {{&main.seg, &main.res.functions}, {&a.seg, &a.res.functions}, {&sb, &rb.functions}};
+    SlotRelations rel = analyze_slots(ts);
+    EXPECT_TRUE(rel.ambiguous.empty());
+    EXPECT_TRUE(rel.stale_if[1].empty());
+    EXPECT_EQ(rel.stale_if[2], std::vector<uint32_t>{1});
+    std::string text = emit_tables(ts).text;
+    EXPECT_TRUE(contains(text, "static const uint16_t stale_OVB[] = {1u, };"));
+}
+
+TEST(EmitterText, OverlayWithoutCodeNeverNeedsRecognising) {
+    Analysed main = analyse_overlay("MAIN", {jr(ra), nop()});
+    Analysed a = analyse_overlay("OVA", {li(v0, 1), jr(ra), nop()});
+    Program pd(kBase);
+    pd.emit({0x11111111u, 0x22222222u});
+    CodeSegment sd = pd.segment("OVD");
+    AnalysisResult rd;
+    main.seg.base = kBase - 0x1000;
+    std::vector<TableSegment> ts = {{&main.seg, &main.res.functions}, {&a.seg, &a.res.functions}, {&sd, &rd.functions}};
+    SlotRelations rel = analyze_slots(ts);
+    EXPECT_TRUE(rel.ambiguous.empty());
+    EXPECT_TRUE(rel.stale_if[2].empty());
+}
+
+TEST(EmitterText, JrToConstantAddressIsAJumpNotALookup) {
+    Program p(kBase);
+    uint32_t target = kBase + 0x20;
+    p.emit({lui(v0, target >> 16), ori(v0, v0, target & 0xFFFF), jr(v0), nop()});
+    while (p.pc() < target) p.emit(nop());
+    p.emit({li(v0, 3), jr(ra), nop()});
+    std::string c = emit_entry(p, nullptr, false);
+    EXPECT_TRUE(contains(c, "goto L_80010020;"));
+    EXPECT_FALSE(contains(c, "dw3_call"));
+}
+
+TEST(EmitterText, JrThroughMemoryCellKeepsTheDynamicLookup) {
+    Program p(kBase);
+    p.emit({lui(t1, 0x8008), lw(t1, 0x2000, t1), nop(), jr(t1), nop()});
+    std::string c = emit_entry(p, nullptr, false);
+    EXPECT_TRUE(contains(c, "dw3_call(ctx, t); return; }"));
+}
+
+TEST(EmitterText, ReturnWhoseDelaySlotOverwritesRaIsRejected) {
+    Program p(kBase);
+    p.emit({jr(ra), addiu(ra, zero, 1)});
+    EXPECT_THROW(emit_entry(p), std::runtime_error);
+}
+
+TEST(EmitterText, ResumePointsAreReported) {
+    Program p(kBase);
+    p.emit({jal(kBase + 0x40), nop(), addiu(t0, t0, -1), bnez(t0, -2), nop(), jr(ra), nop()});
+    static CodeSegment seg;
+    seg = p.segment("TXT");
+    AnalysisConfig cfg;
+    cfg.entries = {p.base()};
+    cfg.scan_data_pointers = false;
+    cfg.scan_jal_words = false;
+    cfg.gap_fill = false;
+    AnalysisResult r = analyze(seg, cfg);
+    EmitContext ec;
+    ec.seg = &seg;
+    ec.local = &r.functions;
+    std::vector<uint32_t> points;
+    emit_function(ec, r.functions.at(p.base()), nullptr, &points);
+    // the call's return point, which is also the loop head the backward branch jumps to
+    EXPECT_EQ(points, (std::vector<uint32_t>{0x80010008}));
+}
