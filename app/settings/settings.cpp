@@ -205,6 +205,8 @@ const SettingInfo kSettings[] = {
      Group::Gameplay, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(gameplay.heal_after_battle)},
     {"gameplay.difficulty", "Difficulty", "Enemies' HP in battle: normal as the original, easy (60%) or hard (130%).",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kDifficulties, false, DW3_FIELD(gameplay.difficulty)},
+    {"gameplay.minimap", "Minimap", "Shows a small map of the field you are walking, with the part on screen outlined and a dot for the party (GPU renderer only; the map pictures come from your disc).",
+     Group::Gameplay, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(gameplay.minimap)},
     {"gameplay.text_speed", "Text speed", "How fast message boxes print their text: normal, fast, or the whole box at once (a button still closes it).",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kTextSpeeds, false, DW3_FIELD(gameplay.text_speed)},
     {"gameplay.auto_battle", "Auto-battle", "Battles fight themselves: every turn the party picks Fight and attacks, and the results screens are passed. Pressing any button for a moment hands a turn back to you.",

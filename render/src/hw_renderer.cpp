@@ -241,6 +241,9 @@ struct HwRenderer::Impl {
     DrawState backdrop_state;
     PrimitiveFlags backdrop_flags;
     bool backdrop_has_state = false;
+    // The last map and scroll the tracker trusted, and the display flip they were seen at (field_position).
+    int field_map = -1, field_sx = 0, field_sy = 0;
+    uint64_t field_frame = 0, flips = 0;
     void flush_backdrop();
     void draw_backdrop_fills(const std::vector<texrep::BackdropFill>& fills, bool wide_copy);
     const Resident* make_tile_resident(const texrep::BackdropFill& fill);
@@ -250,6 +253,7 @@ struct HwRenderer::Impl {
         library = std::move(lib);
         backdrop = texrep::FieldBackdrop(library);
         backdrop_has_state = false;
+        field_map = -1;
     }
     // Wide frame copy (see widescreen.h): the targets have extra columns when it is enabled, `mirror` says whether
     // frame-buffer draws are currently duplicated into it, and `wide_ready[i]` that frame buffer i (y = 0, 256)
@@ -1796,6 +1800,13 @@ void HwRenderer::display_flipped() {
     // A load or transition shrinks the picture and leaves few background sprites to go by: those frames, and the
     // frames around a switch, stay at 4:3, so the margins never alternate between map, stale content and black.
     const bool trusted = m.backdrop.resolve();
+    ++m.flips;
+    if (trusted) {
+        m.field_map = m.backdrop.map();
+        m.field_sx = m.backdrop.scroll_x();
+        m.field_sy = m.backdrop.scroll_y();
+        m.field_frame = m.flips;
+    }
     m.wide_trusted_frames = trusted ? m.wide_trusted_frames + 1 : 0;
     m.wide_shown = m.wide_trusted_frames >= (m.wide_shown ? 1 : kWideEnterFrames);
     if (trusted) m.prefetch_map_images();
@@ -2158,6 +2169,16 @@ bool HwRenderer::write_texture_dump(std::string& error) {
 
 void HwRenderer::set_vsync(bool enabled) {
     if (impl_->swap) impl_->swap->setVsyncEnabled(enabled);
+}
+
+bool HwRenderer::field_position(int& map, int& scroll_x, int& scroll_y, uint64_t& frame) const {
+    const Impl& m = *impl_;
+    if (!m.library || m.field_map < 0) return false;
+    map = m.field_map;
+    scroll_x = m.field_sx;
+    scroll_y = m.field_sy;
+    frame = m.field_frame;
+    return true;
 }
 
 int HwRenderer::internal_scale() const { return impl_->scale; }

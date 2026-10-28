@@ -64,6 +64,9 @@ public:
     // Returns false if this presenter cannot (the software path).
     virtual bool set_texture_dump(const std::string& directory) { return false; }
     virtual bool write_texture_dump(std::string& error) { return true; }
+    // The field map and scroll the GPU renderer recognised last (see dw3::HwRenderer::field_position). False on the
+    // software path or when no field is known.
+    virtual bool field_position(int& map, int& scroll_x, int& scroll_y, uint64_t& frame) const { return false; }
     // Draws and presents one frame. When capture is non-null it receives the window image of this frame.
     virtual bool present(dw3::Gpu& gpu, Capture* capture) = 0;
     // Called once with the machine's GPU before the game starts, so a presenter can install its rasterizer.
@@ -77,6 +80,9 @@ public:
     void set_status(std::string text);
     // On-screen touch controls to draw under the notifications (null: none). Not part of captures.
     void set_touch_controls(TouchControls* touch) { touch_ = touch; }
+    // A picture kept on screen at window position (x, y), such as the minimap; null removes it. `serial` changes
+    // whenever its pixels do. The image must stay valid until it is replaced. Not part of captures.
+    void set_panel(const OsdImage* image, int x, int y, uint64_t serial);
 
 protected:
     // What to blend over the window this frame: the notification alone, or the touch controls with the notification
@@ -95,7 +101,10 @@ protected:
 
 private:
     OsdImage composite_;
-    uint64_t composite_touch_ = ~0ull, composite_osd_ = ~0ull, composite_serial_ = 0;
+    uint64_t composite_touch_ = ~0ull, composite_osd_ = ~0ull, composite_serial_ = 0, composite_panel_ = ~0ull;
+    const OsdImage* panel_ = nullptr;
+    int panel_x_ = 0, panel_y_ = 0;
+    uint64_t panel_serial_ = 0;
     int composite_osd_x_ = -1;
 };
 

@@ -104,6 +104,7 @@
 #include "ingame/audio_groups.h"
 #include "ingame/gameplay.h"
 #include "frame_stats.h"
+#include "present/minimap.h"
 #include "present/monitors.h"
 #include "present/native_window.h"
 #include "settings/controller.h"
@@ -314,6 +315,7 @@ int main(int argc, char** argv) {
                                             {"gameplay.xp_multiplier", "2x"},
                                             {"gameplay.bits_multiplier", "2x"},
                                             {"gameplay.battle_speed", "2x"},
+                                            {"gameplay.minimap", "true"},
                                             {"gameplay.text_speed", "fast"},
                                             {"system.fast_forward_speed", "4x"},
                                             {"system.resume", "true"}})
@@ -507,7 +509,7 @@ int main(int argc, char** argv) {
         po.precise_geometry = g.precise_geometry;
         po.widescreen = static_cast<dw3::WideAspect>(g.widescreen);
         po.texture_pack = texture_packs.get(g);
-        po.stage_library = stage_libraries.get(g, *disc);
+        po.stage_library = stage_libraries.get(g, *disc, st.gameplay.minimap);
         po.internal_res = g.internal_res;
         if (in_field) {
             const int usable = po.texture_pack ? po.texture_pack->scale() : po.texture_filter == 2 ? 2 : 1;
@@ -544,6 +546,10 @@ int main(int argc, char** argv) {
     refresh_display_state();
     int last_fullscreen_mode = active.graphics.display_mode != 0 ? active.graphics.display_mode : 1;
     presenter->attach(machine.gpu());
+    // The field minimap (gameplay.minimap) and how many of its checks found the map unchanged.
+    dw3app::Minimap minimap;
+    uint64_t minimap_seen = 0;
+    int minimap_stale = 0;
 #if defined(DW3_ANDROID)
     // On-screen controls; they hide while a gamepad is used and come back when the screen is touched.
     dw3app::TouchControls touch;
@@ -981,6 +987,29 @@ int main(int argc, char** argv) {
         }
         presenter->set_wide_mode(settings.active().graphics.widescreen != 0 ? dw3::wide_mode_for_game_mode(game_mode)
                                                                             : dw3::WideMode::Off);
+        // The minimap (gameplay.minimap), in the field, a few times a second. It hides when the renderer has not
+        // recognised the map for a while (a map that is still loading, or one the disc's map files do not cover).
+        if (settings.active().gameplay.minimap && in_field) {
+            if (frame % 4 == 0) {
+                int map = 0, sx = 0, sy = 0;
+                uint64_t seen = 0;
+                const auto library = stage_libraries.get(settings.active().graphics, *disc, true);
+                const bool known = library && library->ready() && presenter->field_position(map, sx, sy, seen);
+                minimap_stale = known && seen != minimap_seen ? 0 : minimap_stale + 1;
+                minimap_seen = seen;
+                const dw3app::OsdImage* image = nullptr;
+                int ww = 0, wh = 0;
+                SDL_GetWindowSizeInPixels(window, &ww, &wh);
+                const int u = std::min(ww, wh);
+                if (known && minimap_stale < 8) {
+                    const dw3::DisplayState& shown_area = machine.gpu().display();
+                    image = minimap.frame(*library, map, sx, sy, shown_area.width, shown_area.height, u * 22 / 100);
+                }
+                presenter->set_panel(image, u * 5 / 100, u * 25 / 100, minimap.serial());
+            }
+        } else {
+            presenter->set_panel(nullptr, 0, 0, 0);
+        }
         const auto& shown = settings.active().graphics;
         // Frame pacing "even" repeats presents only while the measured gap between back-to-back presents says the
         // display really runs at a multiple of 60 Hz; the reported refresh rate is just the hint to try.

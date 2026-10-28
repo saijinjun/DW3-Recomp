@@ -111,6 +111,10 @@ bool HwPresenter::set_texture_dump(const std::string& directory) {
     return true;
 }
 
+bool HwPresenter::field_position(int& map, int& scroll_x, int& scroll_y, uint64_t& frame) const {
+    return renderer_ && renderer_->field_position(map, scroll_x, scroll_y, frame);
+}
+
 bool HwPresenter::write_texture_dump(std::string& error) { return renderer_->write_texture_dump(error); }
 
 bool HwPresenter::present(dw3::Gpu& gpu, Capture* capture) {

@@ -223,6 +223,11 @@ public:
     // True if this build contains the backend for `api`.
     static bool api_compiled_in(GraphicsApi api);
 
+    // The field map (an index into the stage library of HwOptions) and its scroll (map pixel at the top-left of the
+    // picture) as the background tracker last worked them out from the game's sprites, with the frame count that
+    // tells how recent that is. False without a stage library or before any field was recognised.
+    bool field_position(int& map, int& scroll_x, int& scroll_y, uint64_t& frame) const;
+
     int internal_scale() const;
     const HwStats& stats() const;
     std::string device_name() const;
