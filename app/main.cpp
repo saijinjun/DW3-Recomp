@@ -550,6 +550,9 @@ int main(int argc, char** argv) {
     dw3app::Minimap minimap;
     uint64_t minimap_seen = 0;
     int minimap_stale = 0;
+    // Where the minimap is on screen (w = 0 while hidden), and whether a tap on it made it large.
+    int minimap_x = 0, minimap_y = 0, minimap_w = 0, minimap_h = 0;
+    bool minimap_large = false;
 #if defined(DW3_ANDROID)
     // On-screen controls; they hide while a gamepad is used and come back when the screen is touched.
     dw3app::TouchControls touch;
@@ -911,7 +914,11 @@ int main(int argc, char** argv) {
                 int ww = 0, wh = 0;
                 SDL_GetWindowSizeInPixels(window, &ww, &wh);
                 const float x = e.tfinger.x * static_cast<float>(ww), y = e.tfinger.y * static_cast<float>(wh);
-                if (e.type == SDL_EVENT_FINGER_DOWN) {
+                const bool on_minimap = minimap_w > 0 && x >= static_cast<float>(minimap_x) && y >= static_cast<float>(minimap_y) &&
+                                        x < static_cast<float>(minimap_x + minimap_w) && y < static_cast<float>(minimap_y + minimap_h);
+                if (e.type == SDL_EVENT_FINGER_DOWN && on_minimap) {
+                    minimap_large = !minimap_large;  // a tap on the minimap shows it large in the middle, another shrinks it
+                } else if (e.type == SDL_EVENT_FINGER_DOWN) {
                     touch.finger_down(e.tfinger.fingerID, x, y, ww, wh);
                     int fingers = 0;
                     SDL_free(SDL_GetTouchFingers(e.tfinger.touchID, &fingers));
@@ -1018,12 +1025,18 @@ int main(int argc, char** argv) {
                         px = static_cast<int32_t>(dw3_read32(&machine.ctx(), player + kPlayerX));
                         py = static_cast<int32_t>(dw3_read32(&machine.ctx(), player + kPlayerY));
                     }
-                    image = minimap.frame(*library, map, sx, sy, shown_area.width, shown_area.height, px, py, u * 22 / 100);
+                    image = minimap.frame(*library, map, sx, sy, shown_area.width, shown_area.height, px, py,
+                                          u * (minimap_large ? 80 : 22) / 100);
                 }
-                presenter->set_panel(image, u * 5 / 100, u * 25 / 100, minimap.serial());
+                minimap_w = image ? image->w : 0;
+                minimap_h = image ? image->h : 0;
+                minimap_x = minimap_large ? (ww - minimap_w) / 2 : u * 5 / 100;
+                minimap_y = minimap_large ? (wh - minimap_h) / 2 : u * 25 / 100;
+                presenter->set_panel(image, minimap_x, minimap_y, minimap.serial());
             }
         } else {
             presenter->set_panel(nullptr, 0, 0, 0);
+            minimap_w = 0;
         }
         const auto& shown = settings.active().graphics;
         // Frame pacing "even" repeats presents only while the measured gap between back-to-back presents says the
