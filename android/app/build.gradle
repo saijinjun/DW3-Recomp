@@ -2,7 +2,9 @@
 // compiler as libzig.so (installed as a native library so that it may be run) and the rest of the toolchain the setup
 // builds the game module with, as the asset toolchain.zip. Build with
 //   gradle assembleRelease   (Gradle 8.12 or later) -PzigDir=<unpacked zig-aarch64-linux distribution>
-// The APK holds no game data: the player picks their own disc image on first start.
+// The APK holds no game data: the player picks their own disc image on first start. A personal build for one player
+// may carry that player's disc and the module prepared from it: -PbundleDir=<dir with disc.bin.zst, module.so,
+// module.name and stamp> (see app/wizard/android_support.h). Never publish such an APK.
 
 import java.security.MessageDigest
 
@@ -12,6 +14,7 @@ plugins {
 
 def repoRoot = file('../..')
 def zigDir = project.findProperty('zigDir')
+def bundleDir = project.findProperty('bundleDir')
 def generatedDir = layout.buildDirectory.dir('generated/toolchain')
 
 android {
@@ -76,7 +79,7 @@ android {
         }
     }
     androidResources {
-        noCompress += ['zip']
+        noCompress += ['zip', 'zst']
     }
     lint {
         abortOnError = false
@@ -87,6 +90,7 @@ android {
 // recompiled code includes and the module's entry point and string functions. The stamp tells the app to unpack a new copy.
 tasks.register('dw3Toolchain') {
     inputs.property('zigDir', zigDir ?: '')
+    inputs.property('bundleDir', bundleDir ?: '')
     inputs.files(fileTree(repoRoot) { include 'runtime/include/dw3/recomp.h', 'runtime/module/*.c' })
     outputs.dir(generatedDir)
     doLast {
@@ -117,6 +121,13 @@ tasks.register('dw3Toolchain') {
             while ((n = s.read(buffer)) > 0) digest.update(buffer, 0, n)
         }
         new File(assets, 'toolchain.stamp').text = digest.digest().encodeHex().toString()
+        if (bundleDir) {
+            project.copy {
+                from file(bundleDir)
+                include 'disc.bin.zst', 'module.so', 'module.name', 'stamp'
+                into new File(assets, 'bundle')
+            }
+        }
     }
 }
 preBuild.dependsOn 'dw3Toolchain'

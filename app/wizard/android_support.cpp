@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 #include <dlfcn.h>
+#include <zstd.h>
 
 #include <cstdlib>
 #include <fstream>
@@ -20,6 +21,17 @@ namespace {
 constexpr const char* kCompilerLibrary = "libzig.so";
 constexpr const char* kToolchainAsset = "toolchain.zip";
 constexpr const char* kToolchainStampAsset = "toolchain.stamp";
+constexpr const char* kBundleStampAsset = "bundle/stamp";
+constexpr const char* kBundleDiscAsset = "bundle/disc.bin.zst";
+constexpr const char* kBundleModuleAsset = "bundle/module.so";
+constexpr const char* kBundleModuleNameAsset = "bundle/module.name";
+
+std::string read_text(const fs::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    std::stringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
 
 std::string utf8(const fs::path& p) { return dw3::platform::path_to_utf8(p); }
 
@@ -75,6 +87,37 @@ bool copy_stream(const std::string& source, const fs::path& target, const std::f
     return ok;
 }
 
+// Decompresses the zstd stream in `source` (an asset) into `target`.
+bool unpack_zstd(const char* source, const fs::path& target, std::string& error) {
+    SDL_IOStream* in = SDL_IOFromFile(source, "rb");
+    if (!in) {
+        error = std::string("Cannot open ") + source + ": " + SDL_GetError();
+        return false;
+    }
+    std::ofstream out(target, std::ios::binary | std::ios::trunc);
+    ZSTD_DStream* z = ZSTD_createDStream();
+    std::vector<char> in_buf(ZSTD_DStreamInSize()), out_buf(ZSTD_DStreamOutSize());
+    bool ok = out.good() && z;
+    std::size_t last = 0;
+    while (ok) {
+        const std::size_t n = SDL_ReadIO(in, in_buf.data(), in_buf.size());
+        if (n == 0) break;
+        ZSTD_inBuffer zin{in_buf.data(), n, 0};
+        while (ok && zin.pos < zin.size) {
+            ZSTD_outBuffer zout{out_buf.data(), out_buf.size(), 0};
+            last = ZSTD_decompressStream(z, &zout, &zin);
+            if (ZSTD_isError(last)) ok = false;
+            else out.write(out_buf.data(), static_cast<std::streamsize>(zout.pos));
+        }
+        ok = ok && out.good();
+    }
+    ok = ok && last == 0 && SDL_GetIOStatus(in) == SDL_IO_STATUS_EOF;
+    ZSTD_freeDStream(z);
+    SDL_CloseIO(in);
+    if (!ok) error = "Unpacking the disc failed (is the device full?).";
+    return ok;
+}
+
 // The folder the system unpacked the APK's native libraries into: the one holding this library.
 fs::path native_library_dir() {
     Dl_info info{};
@@ -104,14 +147,7 @@ std::optional<Toolchain> toolchain(const fs::path& user_data, std::string& error
         return std::nullopt;
     }
     const fs::path dir = user_data / "toolchain";
-    std::string unpacked;
-    {
-        std::ifstream in(dir / "stamp", std::ios::binary);
-        std::stringstream ss;
-        ss << in.rdbuf();
-        unpacked = ss.str();
-    }
-    if (unpacked != stamp) {
+    if (read_text(dir / "stamp") != stamp) {
         fs::remove_all(dir, ec);
         fs::create_directories(user_data, ec);
         const fs::path zip = user_data / "toolchain.zip.part";
@@ -134,6 +170,39 @@ std::optional<Toolchain> toolchain(const fs::path& user_data, std::string& error
     t.link_flags = {"-nostdlib", "-Wl,--no-undefined", "-Wl,-z,max-page-size=16384"};
     t.extra_sources = {dir / "module" / "module_libc.c"};
     return t;
+}
+
+std::optional<std::string> install_bundle(const fs::path& user_data, std::string& error) {
+    std::string stamp;
+    if (!read_small(kBundleStampAsset, stamp)) return std::nullopt;
+    const fs::path dir = user_data / "bundle";
+    const fs::path cue = dir / "disc.cue";
+    if (read_text(dir / "stamp") == stamp) return utf8(cue);
+
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    if (!unpack_zstd(kBundleDiscAsset, dir / "disc.bin", error)) {
+        fs::remove_all(dir, ec);
+        return std::nullopt;
+    }
+    std::ofstream(cue, std::ios::binary) << "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n";
+    // The prepared module, under the name this build looks for (a newer app version builds its own instead).
+    std::string name;
+    if (read_small(kBundleModuleNameAsset, name)) {
+        while (!name.empty() && (name.back() == '\n' || name.back() == '\r')) name.pop_back();
+        fs::create_directories(user_data / "module", ec);
+        const fs::path module = user_data / "module" / name;
+        const fs::path partial = module.string() + ".part";
+        if (!copy_stream(kBundleModuleAsset, partial, nullptr, error)) return std::nullopt;
+        fs::rename(partial, module, ec);
+        if (ec) {
+            error = "Cannot store the prepared game in " + utf8(module.parent_path()) + ".";
+            return std::nullopt;
+        }
+    }
+    std::ofstream(dir / "stamp", std::ios::binary) << stamp;
+    return utf8(cue);
 }
 
 bool import_disc(const std::vector<std::string>& sources, const fs::path& user_data, const std::function<void(double)>& progress,

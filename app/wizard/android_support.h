@@ -29,4 +29,9 @@ std::optional<Toolchain> toolchain(const std::filesystem::path& user_data, std::
 bool import_disc(const std::vector<std::string>& sources, const std::filesystem::path& user_data,
                  const std::function<void(double)>& progress, std::string& disc_path, std::string& error);
 
+// A personal build may carry its owner's disc and the game module prepared from it as APK assets under bundle/
+// (android/app/build.gradle, -PbundleDir). Unpacks them into the user data directory the first time this build runs
+// and returns the disc image to use; nullopt when the APK has no bundle. `error` is set when unpacking fails.
+std::optional<std::string> install_bundle(const std::filesystem::path& user_data, std::string& error);
+
 }  // namespace dw3setup::android

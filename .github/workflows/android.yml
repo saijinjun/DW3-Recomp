@@ -71,3 +71,4 @@ jobs:
           name: DW3Recomp-android-arm64
           path: ${{ runner.temp }}/DW3Recomp-android-arm64.apk
           if-no-files-found: error
+          retention-days: 7  # private repositories have little artifact storage

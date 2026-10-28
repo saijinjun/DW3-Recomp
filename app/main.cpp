@@ -333,6 +333,14 @@ int main(int argc, char** argv) {
     // The disc: --disc, else the one the setup saved, else the checkout's own copy. With none, the setup window opens (not in
     // audit runs, which must not wait for a person).
     auto disc_usable = [](const std::string& p) { return dw3setup::check_disc(dw3::platform::path_from_utf8(p)).ok(); };
+#if defined(DW3_ANDROID)
+    // A personal build that carries its owner's disc (and the game prepared from it) starts straight into the game.
+    if (opt.disc.empty()) {
+        std::string bundle_error;
+        if (auto bundled = dw3setup::android::install_bundle(dw3::platform::user_data_dir(), bundle_error)) opt.disc = *bundled;
+        else if (!bundle_error.empty()) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Digimon World 3", bundle_error.c_str(), nullptr);
+    }
+#endif
     std::optional<std::string> disc = dw3setup::locate_disc(opt.disc, active.system.disc_path, "game/Digimon World 3 (USA).cue", disc_usable);
     // Without recompiled code in the executable the game is a module built from the disc (see module_build.h).
     std::optional<dw3setup::PrepareSetup> prepare;
