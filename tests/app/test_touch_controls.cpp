@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <utility>
 
 #include "dw3/sio.h"
 #include "present/touch_controls.h"
@@ -25,14 +26,18 @@ const TouchControls::Control& find(TouchControls& t, const std::string& label, u
 }  // namespace
 
 TEST(TouchControls, EveryControlFitsInTheWindowWithoutOverlap) {
+    for (const int size : {100, 70, 130})
+        for (const auto [w, h] : {std::pair{kW, kH}, std::pair{1920, 1080}}) {
+    SCOPED_TRACE(testing::Message() << "size " << size << "% window " << w << "x" << h);
     TouchControls t;
-    const auto& cs = t.controls(kW, kH);
+    t.set_style(size, 100);
+    const auto& cs = t.controls(w, h);
     ASSERT_GE(cs.size(), 14u);
     for (std::size_t i = 0; i < cs.size(); ++i) {
         EXPECT_GE(cs[i].x - cs[i].rx, 0.0f) << cs[i].label;
-        EXPECT_LE(cs[i].x + cs[i].rx, static_cast<float>(kW)) << cs[i].label;
+        EXPECT_LE(cs[i].x + cs[i].rx, static_cast<float>(w)) << cs[i].label;
         EXPECT_GE(cs[i].y - cs[i].ry, 0.0f) << cs[i].label;
-        EXPECT_LE(cs[i].y + cs[i].ry, static_cast<float>(kH)) << cs[i].label;
+        EXPECT_LE(cs[i].y + cs[i].ry, static_cast<float>(h)) << cs[i].label;
         for (std::size_t j = i + 1; j < cs.size(); ++j) {
             using Shape = TouchControls::Control::Shape;
             if (cs[i].shape == Shape::Round && cs[j].shape == Shape::Round) {
@@ -44,6 +49,21 @@ TEST(TouchControls, EveryControlFitsInTheWindowWithoutOverlap) {
             EXPECT_TRUE(apart_x || apart_y) << cs[i].label << " overlaps " << cs[j].label;
         }
     }
+        }
+}
+
+TEST(TouchControls, SizeAndOpacityStyleTheControls) {
+    TouchControls t;
+    const float r = find(t, "cross").rx;
+    const auto& img = t.image(kW, kH, 2);
+    const auto alpha_at = [&](const TouchControls::Control& c) {
+        return img.rgba[static_cast<std::size_t>(c.y / 2) * static_cast<std::size_t>(img.w) + static_cast<std::size_t>(c.x / 2)] >> 24;
+    };
+    const uint32_t full = alpha_at(find(t, "cross"));
+    t.set_style(120, 50);
+    EXPECT_FLOAT_EQ(find(t, "cross").rx, r * 1.2f);
+    t.image(kW, kH, 2);
+    EXPECT_NEAR(static_cast<double>(alpha_at(find(t, "cross"))), full * 0.5, 1.0);
 }
 
 TEST(TouchControls, FaceButtonsAndShouldersPressWhileHeld) {

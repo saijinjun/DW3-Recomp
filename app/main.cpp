@@ -486,10 +486,12 @@ int main(int argc, char** argv) {
     // The field is pre-rendered art and sprites: a high 3D scale buys nothing there and costs a lot of GPU memory and
     // bandwidth, so while a field runs the internal resolution is limited to what its HD images and filter can use.
     bool in_field = false;
-    // Battles (and their results screens) may run faster than the rest of the game: gameplay.battle_speed.
+    // Battles (and their results screens) and walking the field may run faster than the rest of the game:
+    // gameplay.battle_speed and gameplay.field_speed.
     bool in_battle = false;
     auto speed_choice = [&](const dw3app::Settings& st) {
-        return std::max(st.gameplay.game_speed, in_battle ? st.gameplay.battle_speed : 0);
+        return std::max({st.gameplay.game_speed, in_battle ? st.gameplay.battle_speed : 0,
+                         in_field ? st.gameplay.field_speed : 0});
     };
     auto present_options = [&](const dw3app::Settings& st) {
         dw3app::PresentOptions po;
@@ -602,7 +604,7 @@ int main(int argc, char** argv) {
             const std::string_view id = info->id;
             if (id == "graphics.display_mode" || id == "graphics.monitor" || id.starts_with("graphics.window_") ||
                 id.starts_with("graphics.fullscreen_")) display = true;
-            else if (id == "gameplay.game_speed" || id == "gameplay.battle_speed") {
+            else if (id == "gameplay.game_speed" || id == "gameplay.battle_speed" || id == "gameplay.field_speed") {
                 audio.set_speed(dw3app::game_speed_multiplier(speed_choice(now)));
                 graphics = true;  // vsync is off while the game runs faster than the display
             }
@@ -952,6 +954,7 @@ int main(int argc, char** argv) {
         }
         touch.set_fast_forward(fast_forward.latched());
         touch.set_auto_battle(settings.active().gameplay.auto_battle);
+        touch.set_style(settings.active().controls.touch_size, settings.active().controls.touch_opacity);
         if (touch.presses() != touch_presses) {
             touch_presses = touch.presses();
             if (vibrator && settings.active().controls.touch_vibration) SDL_PlayHapticRumble(vibrator, 0.35f, 12);
@@ -964,17 +967,14 @@ int main(int argc, char** argv) {
         const bool want_shot = periodic || (last && !opt.screenshot.empty());
         constexpr uint32_t kGameMode = 0x800554D0;
         const uint32_t game_mode = dw3_read32(&machine.ctx(), kGameMode);
-        if ((game_mode == 2) != in_field) {
-            in_field = game_mode == 2;
-            presenter->update_options(present_options(settings.active()), machine.gpu());
-        }
-        if (const bool battle = game_mode == 6 || game_mode == 0x14; battle != in_battle) {
+        if (const bool field = game_mode == 2, battle = game_mode == 6 || game_mode == 0x14;
+            field != in_field || battle != in_battle) {
             const int before = speed_choice(settings.active());
+            in_field = field;
             in_battle = battle;
-            if (speed_choice(settings.active()) != before) {
+            if (speed_choice(settings.active()) != before)
                 audio.set_speed(dw3app::game_speed_multiplier(speed_choice(settings.active())));
-                presenter->update_options(present_options(settings.active()), machine.gpu());
-            }
+            presenter->update_options(present_options(settings.active()), machine.gpu());
         }
         presenter->set_wide_mode(settings.active().graphics.widescreen != 0 ? dw3::wide_mode_for_game_mode(game_mode)
                                                                             : dw3::WideMode::Off);

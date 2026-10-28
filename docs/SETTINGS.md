@@ -64,6 +64,8 @@ everything else applies immediately.
 | `controls.deadzone` | 10 to 50 (percent) | |
 | `controls.prompts` | `auto`, `xbox`, `playstation`, `nintendo` | |
 | `controls.touch_vibration` | bool | |
+| `controls.touch_size` | 70 to 130 (percent) | |
+| `controls.touch_opacity` | 20 to 100 (percent) | |
 | `controls.<action>` | binding text, see Controls | |
 | `system.memcards` (restart) | bool | `--no-memcard` |
 | `system.memcard1`, `system.memcard2` (restart) | paths, empty for the defaults | `--memcard1`, `--memcard2` |
@@ -77,6 +79,7 @@ everything else applies immediately.
 | `gameplay.text_speed` | `normal`, `fast`, `instant` | `--text-speed` |
 | `gameplay.auto_battle` | bool | |
 | `gameplay.battle_speed` | `1x`, `2x`, `3x`, `4x` | |
+| `gameplay.field_speed` | `1x`, `2x`, `3x`, `4x` | |
 
 ## Gameplay options
 

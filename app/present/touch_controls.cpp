@@ -107,6 +107,15 @@ void TouchControls::set_visible(bool visible) {
 void TouchControls::set_fast_forward(bool on) { fast_forward_ = on; }
 void TouchControls::set_auto_battle(bool on) { auto_battle_ = on; }
 
+void TouchControls::set_style(int size_percent, int opacity_percent) {
+    const float scale = static_cast<float>(size_percent) / 100.0f, opacity = static_cast<float>(opacity_percent) / 100.0f;
+    if (scale == scale_ && opacity == opacity_) return;
+    if (scale != scale_) controls_.clear();  // laid out again on the next use
+    scale_ = scale;
+    opacity_ = opacity;
+    drawn_state_ = ~0ull;
+}
+
 const std::vector<TouchControls::Control>& TouchControls::controls(int window_w, int window_h) {
     layout(window_w, window_h);
     return controls_;
@@ -118,9 +127,10 @@ void TouchControls::layout(int w, int h) {
     h_ = h;
     controls_.clear();
     // Everything is sized from the short side so it stays thumb-sized on any screen; the long side spreads it out.
-    const float u = static_cast<float>(std::min(w, h));
+    // The size setting scales the controls but not the margin.
+    const float u = static_cast<float>(std::min(w, h)) * scale_;
     const float fw = static_cast<float>(w), fh = static_cast<float>(h);
-    const float margin = u * 0.05f;
+    const float margin = static_cast<float>(std::min(w, h)) * 0.05f;
     using S = Control::Shape;
     // Left: the d-pad.
     const float dpad_r = u * 0.19f;
@@ -323,6 +333,11 @@ void TouchControls::draw(int downscale) {
                 break;
             }
         }
+    }
+    if (opacity_ < 1.0f) {
+        const float o = std::max(opacity_, 0.0f);
+        for (uint32_t& p : image_.rgba)
+            p = (p & 0x00FFFFFFu) | (static_cast<uint32_t>(std::lround(static_cast<float>(p >> 24) * o)) << 24);
     }
 }
 

@@ -132,6 +132,10 @@ const SettingInfo kSettings[] = {
      Group::Controls, Type::Choice, Apply::Live, 0, 0, kPrompts, false, DW3_FIELD(controls.prompts)},
     {"controls.touch_vibration", "Touch vibration", "Phones: a short vibration for each press of an on-screen button.",
      Group::Controls, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(controls.touch_vibration)},
+    {"controls.touch_size", "Touch control size", "Phones: the size of the on-screen controls, in percent.",
+     Group::Controls, Type::Int, Apply::Live, 70, 130, {}, false, DW3_FIELD(controls.touch_size)},
+    {"controls.touch_opacity", "Touch control opacity", "Phones: how opaque the on-screen controls are, in percent.",
+     Group::Controls, Type::Int, Apply::Live, 20, 100, {}, false, DW3_FIELD(controls.touch_opacity)},
     {"controls.up", "Up binding", "Keyboard key and gamepad button for Up, written as key|button (for example Z|South). Reserved keys cannot be moved.",
      Group::Controls, Type::String, Apply::Live, 0, 0, {}, true, DW3_FIELD(controls.bindings[0])},
     {"controls.down", "Down binding", "Keyboard key and gamepad button for Down, written as key|button (for example Z|South). Reserved keys cannot be moved.",
@@ -200,6 +204,8 @@ const SettingInfo kSettings[] = {
      Group::Gameplay, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(gameplay.auto_battle)},
     {"gameplay.battle_speed", "Battle speed", "Runs battles and their results faster than the rest of the game (the higher of this and the game speed applies).",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kGameSpeeds, false, DW3_FIELD(gameplay.battle_speed)},
+    {"gameplay.field_speed", "Field speed", "Runs the field faster than the rest of the game, so walking between places takes less time (the higher of this and the game speed applies).",
+     Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kGameSpeeds, false, DW3_FIELD(gameplay.field_speed)},
 };
 
 #undef DW3_FIELD
