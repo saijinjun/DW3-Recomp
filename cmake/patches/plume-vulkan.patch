@@ -139,7 +139,7 @@ index 4a2a489..918aa96 100644
 +        for (const std::string &extension : extraInstanceExtensions()) {
 +            requiredExtensions.insert(extension);
 +        }
-+#   if defined(__linux__) && !defined(PLUME_SDL_VULKAN_ENABLED)
++#   if defined(__linux__) && !defined(__ANDROID__) && !defined(PLUME_SDL_VULKAN_ENABLED)
 +        if (extraInstanceExtensions().empty()) {
 +            requiredExtensions.insert(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
 +        }

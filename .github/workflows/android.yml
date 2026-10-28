@@ -49,6 +49,11 @@ jobs:
           echo "CMAKE_VERSION=${cmake_pkg#cmake;}" >> "$GITHUB_ENV"
           echo "NDK_VERSION=$(basename "$ANDROID_NDK_LATEST_HOME")" >> "$GITHUB_ENV"
           echo "Using CMake ${cmake_pkg#cmake;}, NDK $(basename "$ANDROID_NDK_LATEST_HOME")"
+          # Keep compiling after an error, so that one run reports every file that fails.
+          ninja="$ANDROID_HOME/cmake/${cmake_pkg#cmake;}/bin/ninja"
+          mv "$ninja" "$ninja.real"
+          printf '#!/bin/sh\nexec "%s" -k 0 "$@"\n' "$ninja.real" > "$ninja"
+          chmod +x "$ninja"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
