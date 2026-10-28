@@ -80,7 +80,12 @@ namespace {
 
 constexpr RenderFormat kVramFormat = RenderFormat::R8G8B8A8_UNORM;
 constexpr RenderFormat kLayerFormat = RenderFormat::R16G16B16A16_UNORM;
+// Android's Vulkan drivers commonly offer only RGBA window surfaces (B8G8R8A8 is optional there).
+#if defined(__ANDROID__)
+constexpr RenderFormat kSwapFormat = RenderFormat::R8G8B8A8_UNORM;
+#else
 constexpr RenderFormat kSwapFormat = RenderFormat::B8G8R8A8_UNORM;
+#endif
 
 constexpr std::size_t kVertexBufferBytes = 48u << 20;
 constexpr std::size_t kStagingBytes = 16u << 20;
@@ -739,6 +744,8 @@ bool HwRenderer::Impl::create_swapchain(const NativeWindow& window) {
     RenderWindow w{};
     w.window = window.cocoa_window;
     w.view = window.metal_layer;
+#elif defined(__ANDROID__)
+    RenderWindow w = static_cast<RenderWindow>(window.android_window);
 #else
     RenderWindow w{};
     w.userData = window.user;
@@ -1523,8 +1530,8 @@ void HwRenderer::Impl::draw_overlay(uint32_t w, uint32_t h, const HwOverlay& o) 
     OsdParams p{};
     p.dest[0] = static_cast<float>(o.x);
     p.dest[1] = static_cast<float>(o.y);
-    p.dest[2] = static_cast<float>(o.w);
-    p.dest[3] = static_cast<float>(o.h);
+    p.dest[2] = static_cast<float>(o.dest_w > 0 ? o.dest_w : o.w);
+    p.dest[3] = static_cast<float>(o.dest_h > 0 ? o.dest_h : o.h);
     p.window[0] = static_cast<float>(w);
     p.window[1] = static_cast<float>(h);
     p.opacity = o.opacity;
@@ -1537,15 +1544,17 @@ void HwRenderer::Impl::draw_overlay(uint32_t w, uint32_t h, const HwOverlay& o) 
     ++stats.draw_calls;
 }
 
-// Converts the capture buffer (BGRA) of the last frame into RGBA8.
+// Converts the capture buffer (kSwapFormat) of the last frame into RGBA8.
 void HwRenderer::Impl::read_capture(uint32_t w, uint32_t h, std::vector<uint32_t>& out) {
     const uint32_t pitch = upload_row_pixels(w);
     const auto* data = static_cast<const uint32_t*>(capture_buf->map());
     out.resize(static_cast<std::size_t>(w) * h);
     for (uint32_t y = 0; y < h; ++y) {
         for (uint32_t x = 0; x < w; ++x) {
-            const uint32_t bgra = data[static_cast<std::size_t>(y) * pitch + x];
-            out[static_cast<std::size_t>(y) * w + x] = (bgra & 0xFF00FF00u) | ((bgra & 0xFF) << 16) | ((bgra >> 16) & 0xFF) | 0xFF000000u;
+            const uint32_t px = data[static_cast<std::size_t>(y) * pitch + x];
+            out[static_cast<std::size_t>(y) * w + x] =
+                kSwapFormat == RenderFormat::R8G8B8A8_UNORM ? px | 0xFF000000u
+                                                            : (px & 0xFF00FF00u) | ((px & 0xFF) << 16) | ((px >> 16) & 0xFF) | 0xFF000000u;
         }
     }
     capture_buf->unmap();
@@ -1923,6 +1932,15 @@ bool HwRenderer::read_display(const VramRect& r, std::vector<uint32_t>& rgba) {
         }
     m.readback_buf->unmap();
     return true;
+}
+
+bool HwRenderer::set_window(const NativeWindow& window) {
+    Impl& m = *impl_;
+    if (!m.has_window) return false;
+    m.record_draws();
+    m.submit();
+    m.native_window = window;
+    return m.recreate_swapchain();
 }
 
 bool HwRenderer::present(const DisplayState& shown, ScaleMode mode, bool linear, std::vector<uint32_t>* capture,

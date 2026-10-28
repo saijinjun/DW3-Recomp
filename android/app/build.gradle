@@ -1,0 +1,133 @@
+// The Android app: SDL's Java activity around libmain.so (the program, built from the top-level CMakeLists.txt), the zig
+// compiler as libzig.so (installed as a native library so that it may be run) and the rest of the toolchain the setup
+// builds the game module with, as the asset toolchain.zip. Build with
+//   gradle assembleRelease   (Gradle 8.12 or later) -PzigDir=<unpacked zig-aarch64-linux distribution>
+// The APK holds no game data: the player picks their own disc image on first start. A personal build for one player
+// may carry that player's disc and the module prepared from it: -PbundleDir=<dir with disc.bin.zst, module.so,
+// module.name and stamp> (see app/wizard/android_support.h). Never publish such an APK.
+
+import java.security.MessageDigest
+
+plugins {
+    id 'com.android.application'
+}
+
+def repoRoot = file('../..')
+def zigDir = project.findProperty('zigDir')
+def bundleDir = project.findProperty('bundleDir')
+def generatedDir = layout.buildDirectory.dir('generated/toolchain')
+
+android {
+    namespace = 'com.dw3recomp'
+    compileSdk = 35
+    if (project.hasProperty('ndkVersion')) ndkVersion = project.property('ndkVersion')
+
+    defaultConfig {
+        applicationId = 'com.dw3recomp'
+        minSdk = 28  // posix_spawn, which SDL starts the compiler with
+        targetSdk = 35
+        versionCode = (project.findProperty('versionCode') ?: '1') as int
+        versionName = '0.1.0'
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                arguments '-DDW3_BUILD_TESTS=OFF', '-DANDROID_PLATFORM=android-28', '-DANDROID_STL=c++_static',
+                          '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_POLICY_VERSION_MINIMUM=3.5'
+                targets 'dw3recomp', 'SDL3-shared'
+            }
+        }
+    }
+
+    // One fixed key, so that a newer build installs over an older one and keeps its saves. Personal builds only.
+    signingConfigs {
+        personal {
+            storeFile file('dw3recomp.keystore')
+            storePassword 'dw3recomp'
+            keyAlias 'dw3recomp'
+            keyPassword 'dw3recomp'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.personal
+        }
+        debug {
+            signingConfig signingConfigs.personal
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path '../../CMakeLists.txt'
+            if (project.hasProperty('cmakeVersion')) version = project.property('cmakeVersion')
+        }
+    }
+
+    sourceSets.main {
+        assets.srcDir generatedDir.map { it.dir('assets') }
+        jniLibs.srcDir generatedDir.map { it.dir('jniLibs') }
+    }
+
+    packaging {
+        jniLibs {
+            // Native libraries are unpacked on install, which is what lets the compiler be run from there.
+            useLegacyPackaging = true
+            keepDebugSymbols += ['**/libzig.so']
+        }
+    }
+    androidResources {
+        noCompress += ['zip', 'zst']
+    }
+    lint {
+        abortOnError = false
+    }
+}
+
+// The toolchain: the compiler, zig's compiler headers (the module is freestanding: no libc is linked), the header the
+// recompiled code includes and the module's entry point and string functions. The stamp tells the app to unpack a new copy.
+tasks.register('dw3Toolchain') {
+    inputs.property('zigDir', zigDir ?: '')
+    inputs.property('bundleDir', bundleDir ?: '')
+    inputs.files(fileTree(repoRoot) { include 'runtime/include/dw3/recomp.h', 'runtime/module/*.c' })
+    outputs.dir(generatedDir)
+    doLast {
+        if (!zigDir) throw new GradleException('Pass -PzigDir=<unpacked zig aarch64-linux distribution>.')
+        def zig = file(zigDir)
+        def out = generatedDir.get().asFile
+        project.delete(out)
+        def libs = new File(out, 'jniLibs/arm64-v8a')
+        def assets = new File(out, 'assets')
+        libs.mkdirs()
+        assets.mkdirs()
+        project.copy {
+            from new File(zig, 'zig')
+            into libs
+            rename { 'libzig.so' }
+        }
+        def zip = new File(assets, 'toolchain.zip')
+        ant.zip(destfile: zip) {
+            zipfileset(dir: new File(zig, 'lib/include'), prefix: 'lib/include')
+            zipfileset(file: new File(zig, 'LICENSE'), fullpath: 'LICENSE.zig')
+            zipfileset(file: new File(repoRoot, 'runtime/include/dw3/recomp.h'), fullpath: 'include/dw3/recomp.h')
+            zipfileset(dir: new File(repoRoot, 'runtime/module'), includes: '*.c', prefix: 'module')
+        }
+        def digest = MessageDigest.getInstance('SHA-256')
+        zip.withInputStream { s ->
+            byte[] buffer = new byte[1 << 16]
+            int n
+            while ((n = s.read(buffer)) > 0) digest.update(buffer, 0, n)
+        }
+        new File(assets, 'toolchain.stamp').text = digest.digest().encodeHex().toString()
+        if (bundleDir) {
+            project.copy {
+                from file(bundleDir)
+                include 'disc.bin.zst', 'module.so', 'module.name', 'stamp'
+                into new File(assets, 'bundle')
+            }
+        }
+    }
+}
+preBuild.dependsOn 'dw3Toolchain'

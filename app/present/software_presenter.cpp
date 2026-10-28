@@ -44,21 +44,21 @@ bool SoftwarePresenter::update_options(const PresentOptions& options, dw3::Gpu&)
 void SoftwarePresenter::draw_osd() {
     int ww = 0, wh = 0;
     SDL_GetCurrentRenderOutputSize(renderer_, &ww, &wh);
-    float opacity = 1.0f;
-    const OsdImage* img = osd_.frame(ww, wh, SDL_GetTicks(), opacity);
-    if (!img) return;
-    if (!osd_texture_ || osd_serial_ != osd_.serial()) {
+    OverlayFrame img;
+    if (!overlay_frame(ww, wh, img)) return;
+    if (!osd_texture_ || osd_serial_ != img.serial) {
         if (osd_texture_) SDL_DestroyTexture(osd_texture_);
-        osd_texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STATIC, img->w, img->h);
+        osd_texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STATIC, img.w, img.h);
         if (!osd_texture_) return;
-        SDL_UpdateTexture(osd_texture_, nullptr, img->rgba.data(), img->w * 4);
+        SDL_UpdateTexture(osd_texture_, nullptr, img.rgba, img.w * 4);
         SDL_SetTextureBlendMode(osd_texture_, SDL_BLENDMODE_BLEND);
         SDL_SetTextureScaleMode(osd_texture_, SDL_SCALEMODE_NEAREST);
-        osd_serial_ = osd_.serial();
+        osd_serial_ = img.serial;
     }
-    SDL_SetTextureAlphaModFloat(osd_texture_, opacity);
-    const SDL_FRect dst = {static_cast<float>(osd_.x(ww)), static_cast<float>(osd_.margin()),
-                           static_cast<float>(img->w), static_cast<float>(img->h)};
+    SDL_SetTextureAlphaModFloat(osd_texture_, img.opacity);
+    const SDL_FRect dst = {static_cast<float>(img.x), static_cast<float>(img.y), static_cast<float>(img.dest_w > 0 ? img.dest_w : img.w),
+                           static_cast<float>(img.dest_h > 0 ? img.dest_h : img.h)};
+    SDL_SetTextureScaleMode(osd_texture_, img.dest_w > 0 && img.dest_w != img.w ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
     SDL_RenderTexture(renderer_, osd_texture_, nullptr, &dst);
 }
 

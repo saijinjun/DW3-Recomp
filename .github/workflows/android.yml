@@ -1,0 +1,74 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+# Builds the Android app (android/): the program for arm64 phones with the zig compiler and toolchain the setup uses to
+# build the game module from the player's own disc. The APK holds no game data. It is kept as a workflow artifact.
+
+jobs:
+  apk:
+    name: Android APK (arm64)
+    runs-on: ubuntu-24.04
+    env:
+      ZIG_VERSION: 0.17.0
+      ZIG_ARCHIVE: zig-aarch64-linux-0.17.0.tar.xz
+      ZIG_SHA256: 9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends glslang-tools spirv-tools
+
+      - name: Fetch zig
+        run: |
+          curl -fsSL "https://ziglang.org/download/$ZIG_VERSION/$ZIG_ARCHIVE" -o "$RUNNER_TEMP/zig.tar.xz"
+          echo "$ZIG_SHA256  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/zig" && tar -xf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+
+      # The newest CMake the SDK offers (the project needs 3.24 or later) and the newest NDK on the runner.
+      - name: Android SDK packages
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          cmake_pkg=$("$sdkmanager" --list 2>/dev/null | grep -o 'cmake;[0-9.]*' | sort -t';' -k2 -V | tail -1)
+          yes | "$sdkmanager" --install "$cmake_pkg" > /dev/null
+          echo "CMAKE_VERSION=${cmake_pkg#cmake;}" >> "$GITHUB_ENV"
+          echo "NDK_VERSION=$(basename "$ANDROID_NDK_LATEST_HOME")" >> "$GITHUB_ENV"
+          echo "Using CMake ${cmake_pkg#cmake;}, NDK $(basename "$ANDROID_NDK_LATEST_HOME")"
+          # Keep compiling after an error, so that one run reports every file that fails.
+          ninja="$ANDROID_HOME/cmake/${cmake_pkg#cmake;}/bin/ninja"
+          mv "$ninja" "$ninja.real"
+          printf '#!/bin/sh\nexec "%s" -k 0 "$@"\n' "$ninja.real" > "$ninja"
+          chmod +x "$ninja"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.12
+
+      - name: Build
+        working-directory: android
+        run: |
+          gradle --no-daemon assembleRelease -PzigDir="$RUNNER_TEMP/zig" -PcmakeVersion="$CMAKE_VERSION" \
+            -PndkVersion="$NDK_VERSION" -PversionCode="${{ github.run_number }}"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/DW3Recomp-android-arm64.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DW3Recomp-android-arm64
+          path: ${{ runner.temp }}/DW3Recomp-android-arm64.apk
+          if-no-files-found: error
+          retention-days: 7  # private repositories have little artifact storage

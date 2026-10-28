@@ -22,6 +22,9 @@
 #include "process_runner.h"
 #include "roboto_medium.h"
 #include "window_icon.h"
+#if defined(DW3_ANDROID)
+#include "android_support.h"
+#endif
 
 namespace dw3setup {
 
@@ -94,6 +97,7 @@ void colored_wrapped(ImU32 color, const std::string& text) {
 struct DialogResult {
     std::mutex mutex;
     std::string path;
+    std::vector<std::string> paths;  // every file picked (Android picks the .cue and its .bin files together)
     bool has_path = false;
     bool failed = false;
 };
@@ -104,9 +108,17 @@ void SDLCALL on_file_chosen(void* userdata, const char* const* files, int) {
     if (!files) result->failed = true;
     else if (files[0]) {
         result->path = files[0];
+        result->paths.clear();
+        for (const char* const* f = files; *f; ++f) result->paths.emplace_back(*f);
         result->has_path = true;
     }
 }
+
+#if defined(DW3_ANDROID)
+constexpr bool kImportDisc = true;  // picked files are content:// addresses: copy them in before use
+#else
+constexpr bool kImportDisc = false;
+#endif
 
 class SetupUi {
 public:
@@ -119,7 +131,10 @@ public:
         std::snprintf(path_buffer_, sizeof path_buffer_, "%s", launch.initial_disc.c_str());
         plan_ = plan_for(dw3::platform::host_os(), dw3::platform::host_arch());
     }
-    ~SetupUi() { stop_worker(); }
+    ~SetupUi() {
+        stop_worker();
+        if (import_.joinable()) import_.join();
+    }
 
     WizardState& state() { return state_; }
 
@@ -249,7 +264,20 @@ private:
             if (dialog_.failed) colored_wrapped(kWarn, "The file picker could not be opened on this system. Type the path instead.");
         }
         ImGui::Spacing();
-        colored_wrapped(kMuted, "The image is only read, never changed or copied. Only its location is saved.");
+        if (kImportDisc) {
+            std::lock_guard lock(import_mutex_);
+            if (importing_) {
+                ImGui::TextUnformatted("Copying the disc into the app...");
+                ImGui::ProgressBar(import_fraction_ < 0 ? -1.0f * static_cast<float>(ImGui::GetTime()) : static_cast<float>(import_fraction_), ImVec2(-1, 0));
+            } else if (!import_error_.empty()) {
+                colored_wrapped(kBad, import_error_);
+            }
+            ImGui::Spacing();
+            colored_wrapped(kMuted, "Browse and pick the .cue file together with its .bin file (long-press to select both), or only the .bin. "
+                                    "They are copied into the app's own storage once; the originals are not changed.");
+        } else {
+            colored_wrapped(kMuted, "The image is only read, never changed or copied. Only its location is saved.");
+        }
     }
 
     void verify() {
@@ -430,7 +458,7 @@ private:
             dialog_.failed = false;
         }
         static const SDL_DialogFileFilter filters[] = {{"Disc images", "cue;bin;iso"}, {"All files", "*"}};
-        SDL_ShowOpenFileDialog(on_file_chosen, &dialog_, window_, filters, 2, nullptr, false);
+        SDL_ShowOpenFileDialog(on_file_chosen, &dialog_, window_, filters, 2, nullptr, kImportDisc);
     }
 
     // Per-frame housekeeping: the file picker's answer and the worker's progress.
@@ -438,10 +466,12 @@ private:
         {
             std::lock_guard lock(dialog_.mutex);
             if (dialog_.has_path) {
-                demo_type_path(dialog_.path);
+                if (kImportDisc) begin_import(dialog_.paths);
+                else demo_type_path(dialog_.path);
                 dialog_.has_path = false;
             }
         }
+        finish_import();
         if (state_.step() == Step::PrepareWork) {
             if (worker_done_ && worker_.joinable()) {
                 worker_.join();
@@ -466,6 +496,46 @@ private:
         }
     }
 
+    // Android: copies the picked files into the app's storage on a thread; the page shows the progress.
+    void begin_import(const std::vector<std::string>& sources) {
+#if defined(DW3_ANDROID)
+        if (import_.joinable()) return;
+        {
+            std::lock_guard lock(import_mutex_);
+            importing_ = true;
+            import_done_ = false;
+            import_fraction_ = -1.0;
+            import_error_.clear();
+        }
+        import_ = std::thread([this, sources] {
+            std::string disc, error;
+            const bool ok = android::import_disc(sources, launch_.user_data, [this](double f) {
+                std::lock_guard lock(import_mutex_);
+                import_fraction_ = f;
+            }, disc, error);
+            std::lock_guard lock(import_mutex_);
+            import_result_ = ok ? disc : std::string();
+            import_error_ = ok ? std::string() : error;
+            import_done_ = true;
+        });
+#else
+        (void)sources;
+#endif
+    }
+
+    void finish_import() {
+        std::string disc;
+        {
+            std::lock_guard lock(import_mutex_);
+            if (!import_done_) return;
+            import_done_ = false;
+            importing_ = false;
+            disc = import_result_;
+        }
+        if (import_.joinable()) import_.join();
+        if (!disc.empty()) demo_type_path(disc);
+    }
+
     void begin_prepare() {
         if (!launch_.prepare) return;
         if (state_.prepare_failed()) state_.retry_prepare();
@@ -479,6 +549,9 @@ private:
         config.toolchain = launch_.prepare->toolchain;
         config.build_id = launch_.prepare->build_id;
         config.jobs = std::max(2u, std::thread::hardware_concurrency());
+#if defined(DW3_ANDROID)
+        config.jobs = std::min(config.jobs, 4u);  // each compiler run needs a lot of memory for a phone
+#endif
         config.run = [](const std::vector<std::string>& command, const std::atomic<bool>& cancel) { return run_process(command, cancel); };
         preparer_ = std::make_unique<ModulePreparer>(std::move(config));
         worker_ = std::thread([this] {
@@ -535,6 +608,11 @@ private:
     DownloadPlan plan_;
     char path_buffer_[1024]{};
     DialogResult dialog_;
+    std::thread import_;
+    std::mutex import_mutex_;
+    bool importing_ = false, import_done_ = false;
+    double import_fraction_ = -1.0;
+    std::string import_result_, import_error_;
     Step shown_step_ = Step::Welcome;
     bool step_changed_ = true;
     int focus_frames_ = 2;

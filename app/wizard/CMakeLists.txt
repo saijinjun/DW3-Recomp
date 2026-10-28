@@ -9,6 +9,7 @@ add_library(dw3wizard_core STATIC
     sha256.cpp
     disc_check.cpp
     disc_location.cpp
+    disc_import.cpp
     assets.cpp
     commands.cpp
     zip_extract.cpp
@@ -44,6 +45,9 @@ add_library(dw3wizard_ui STATIC
     wizard_ui.cpp
     process_runner.cpp
     ${WIZARD_FONT_HEADER})
+if(ANDROID)
+    target_sources(dw3wizard_ui PRIVATE android_support.cpp)
+endif()
 target_include_directories(dw3wizard_ui PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(dw3wizard_ui PUBLIC dw3wizard_core PRIVATE imgui dw3icon dw3texrep dw3runtime SDL3::SDL3)
 dw3_target_defaults(dw3wizard_ui)

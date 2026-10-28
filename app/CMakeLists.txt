@@ -1,12 +1,21 @@
-add_executable(dw3recomp main.cpp
+set(DW3_APP_SOURCES main.cpp
     host_input.cpp
     present/presenter.cpp
     present/osd.cpp
+    present/touch_controls.cpp
     present/software_presenter.cpp
     present/hw_presenter.cpp
     present/texture_packs.cpp
     present/native_window.cpp
     present/monitors.cpp)
+# On Android the program is the shared library SDL's Java activity loads (libmain.so), not an executable.
+if(ANDROID)
+    add_library(dw3recomp SHARED ${DW3_APP_SOURCES})
+    set_target_properties(dw3recomp PROPERTIES OUTPUT_NAME main)
+    target_link_options(dw3recomp PRIVATE "-Wl,-z,max-page-size=16384")
+else()
+    add_executable(dw3recomp ${DW3_APP_SOURCES})
+endif()
 if(WIN32)
     target_sources(dw3recomp PRIVATE windows/dw3recomp.rc)
 endif()

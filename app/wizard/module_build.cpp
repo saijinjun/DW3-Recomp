@@ -86,17 +86,25 @@ PrepareResult ModulePreparer::fail(std::string message) {
     return r;
 }
 
+std::string ModulePreparer::target() const {
+    return config_.toolchain.target.empty() ? compile_target(config_.os, config_.arch) : config_.toolchain.target;
+}
+
 std::vector<std::string> ModulePreparer::compile_command(const fs::path& source, const fs::path& object) const {
-    std::vector<std::string> c = {utf8(config_.toolchain.compiler), "cc", "-target", compile_target(config_.os, config_.arch),
+    std::vector<std::string> c = {utf8(config_.toolchain.compiler), "cc", "-target", target(),
                                   "-O1", "-w", "-fexceptions", "-ffp-contract=off", "-DDW3_MODULE=1"};
     if (config_.os != Os::Windows) c.push_back("-fPIC");
+    c.insert(c.end(), config_.toolchain.compile_flags.begin(), config_.toolchain.compile_flags.end());
     c.insert(c.end(), {"-I", utf8(config_.toolchain.include_dir), "-c", utf8(source), "-o", utf8(object)});
     return c;
 }
 
 std::vector<std::string> ModulePreparer::link_command(const fs::path& output, const fs::path& response_file) const {
-    return {utf8(config_.toolchain.compiler), "cc", "-target", compile_target(config_.os, config_.arch),
-            config_.os == Os::MacOS ? "-dynamiclib" : "-shared", "-o", utf8(output), "@" + utf8(response_file)};
+    std::vector<std::string> c = {utf8(config_.toolchain.compiler), "cc", "-target", target(),
+                                  config_.os == Os::MacOS ? "-dynamiclib" : "-shared"};
+    c.insert(c.end(), config_.toolchain.link_flags.begin(), config_.toolchain.link_flags.end());
+    c.insert(c.end(), {"-o", utf8(output), "@" + utf8(response_file)});
+    return c;
 }
 
 bool ModulePreparer::compile_all(const fs::path& dir, const std::vector<std::string>& sources, std::vector<fs::path>& objects,
@@ -182,11 +190,16 @@ PrepareResult ModulePreparer::run() {
     std::vector<fs::path> objects;
     set_status(PreparePhase::Compiling, "Compiling the game code", 0.0);
     if (!compile_all(dir, sources, objects, error)) return fail(error);
-    // module_entry.c comes with the toolchain; build it beside the generated sources.
+    // module_entry.c (and any other support source) comes with the toolchain; build it beside the generated sources.
     {
         const fs::path entry_object = dir / "obj" / "module_entry.c.o";
         if (config_.run(compile_command(config_.toolchain.module_entry, entry_object), cancel_) != 0) return fail("The compiler failed on the module entry point.");
         objects.push_back(entry_object);
+        for (const fs::path& extra : config_.toolchain.extra_sources) {
+            const fs::path extra_object = dir / "obj" / (extra.filename().string() + ".o");
+            if (config_.run(compile_command(extra, extra_object), cancel_) != 0) return fail("The compiler failed on " + utf8(extra.filename()) + ".");
+            objects.push_back(extra_object);
+        }
     }
 
     set_status(PreparePhase::Linking, "Linking the game", -1.0);

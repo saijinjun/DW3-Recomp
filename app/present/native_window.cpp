@@ -43,6 +43,22 @@ void release_window(dw3::NativeWindow& native) {
 
 std::vector<std::string> required_instance_extensions() { return {}; }
 
+#elif defined(__ANDROID__)
+
+// plume creates the Vulkan surface from the ANativeWindow itself.
+dw3::NativeWindow describe_window(SDL_Window* window) {
+    dw3::NativeWindow w;
+    w.user = window;
+    w.android_window = SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr);
+    return w;
+}
+
+void release_window(dw3::NativeWindow&) {}
+
+// Not empty: plume's Linux path (which Android also takes there) asks for the Xlib surface extension when no extra
+// extensions are given.
+std::vector<std::string> required_instance_extensions() { return {"VK_KHR_surface", "VK_KHR_android_surface"}; }
+
 #else
 
 namespace {

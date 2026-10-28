@@ -100,6 +100,12 @@ void HwPresenter::set_wide_mode(dw3::WideMode mode) { renderer_->set_wide_mode(m
 
 void HwPresenter::attach(dw3::Gpu& gpu) { gpu.set_rasterizer(renderer_.get()); }
 
+void HwPresenter::surface_changed() {
+    release_window(native_);
+    native_ = describe_window(window_);
+    if (!renderer_->set_window(native_)) SDL_Log("cannot present to the new window surface");
+}
+
 bool HwPresenter::set_texture_dump(const std::string& directory) {
     renderer_->set_texture_dump(directory);
     return true;
@@ -112,14 +118,18 @@ bool HwPresenter::present(dw3::Gpu& gpu, Capture* capture) {
     int ww = 0, wh = 0;
     SDL_GetWindowSizeInPixels(window_, &ww, &wh);
     dw3::HwOverlay overlay;
-    const OsdImage* img = osd_.frame(ww, wh, SDL_GetTicks(), overlay.opacity);
+    OverlayFrame frame;
+    const bool img = overlay_frame(ww, wh, frame);
     if (img) {
-        overlay.rgba = img->rgba.data();
-        overlay.w = img->w;
-        overlay.h = img->h;
-        overlay.x = osd_.x(ww);
-        overlay.y = osd_.margin();
-        overlay.serial = osd_.serial();
+        overlay.rgba = frame.rgba;
+        overlay.w = frame.w;
+        overlay.h = frame.h;
+        overlay.x = frame.x;
+        overlay.y = frame.y;
+        overlay.dest_w = frame.dest_w;
+        overlay.dest_h = frame.dest_h;
+        overlay.serial = frame.serial;
+        overlay.opacity = frame.opacity;
     }
     const bool ok = renderer_->present(gpu.display(), options_.scale, options_.linear, capture ? &capture->rgba : nullptr, &w, &h,
                                        img ? &overlay : nullptr, &options_.post);

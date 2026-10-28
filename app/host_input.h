@@ -34,6 +34,7 @@ public:
     Hotkeys hotkeys;                             // what the hotkey bindings do; set by the application
     const std::vector<Press>* script = nullptr;  // scripted presses by frame
     int64_t frame = 0;
+    uint16_t touch_buttons = 0;                  // console buttons held on the on-screen touch controls
 
     // Console pad (port 1).
     bool connected(int port) override { return port == 0; }

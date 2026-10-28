@@ -13,6 +13,7 @@ if(WIN32)
 elseif(APPLE)
     set(DW3_OS "macos")
 elseif(UNIX)
+    # Android counts as Linux (same kernel, POSIX and Vulkan paths); DW3_ANDROID marks what differs.
     set(DW3_OS "linux")
 else()
     message(FATAL_ERROR "Unsupported OS")
@@ -42,6 +43,9 @@ function(dw3_target_defaults target)
     target_compile_definitions(${target} PUBLIC
         DW3_OS_${DW3_OS}=1
         DW3_ARCH_${DW3_ARCH}=1)
+    if(ANDROID)
+        target_compile_definitions(${target} PUBLIC DW3_ANDROID=1)
+    endif()
     if(WIN32)
         target_compile_definitions(${target} PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
     endif()

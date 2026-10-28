@@ -19,6 +19,7 @@ public:
     void set_wide_mode(dw3::WideMode mode) override;
     bool present(dw3::Gpu& gpu, Capture* capture) override;
     void attach(dw3::Gpu& gpu) override;
+    void surface_changed() override;
     bool set_texture_dump(const std::string& directory) override;
     bool write_texture_dump(std::string& error) override;
 
