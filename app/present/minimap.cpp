@@ -1,6 +1,7 @@
 #include "minimap.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 
 namespace dw3app {
@@ -76,7 +77,8 @@ Image Minimap::compose(StageLibrary& library, int map) {
     return out;
 }
 
-bool Minimap::build(StageLibrary& library, int map, int size) {
+Minimap::Base Minimap::build(StageLibrary& library, int map, int size) {
+    Base out;
     const Image full = compose(library, map);
     // Only the part of the map that has pictures.
     int x0 = full.w, y0 = full.h, x1 = -1, y1 = -1;
@@ -88,25 +90,28 @@ bool Minimap::build(StageLibrary& library, int map, int size) {
                 y0 = std::min(y0, y);
                 y1 = std::max(y1, y);
             }
-    if (x1 < x0 || y1 < y0) return false;
+    if (x1 < x0 || y1 < y0) return out;
     const int cw = x1 - x0 + 1, ch = y1 - y0 + 1;
-    border_ = std::max(2, size / 40);
-    const int inner = std::max(8, size - 2 * border_);
-    scale_ = std::min(1.0f, static_cast<float>(inner) / static_cast<float>(std::max(cw, ch)));
-    const int mw = std::max(1, static_cast<int>(std::lround(static_cast<float>(cw) * scale_)));
-    const int mh = std::max(1, static_cast<int>(std::lround(static_cast<float>(ch) * scale_)));
-    crop_x_ = x0;
-    crop_y_ = y0;
-    base_.w = mw + 2 * border_;
-    base_.h = mh + 2 * border_;
-    base_.rgba.assign(static_cast<std::size_t>(base_.w) * static_cast<std::size_t>(base_.h), kPanel);
+    const int border = std::max(2, size / 40);
+    const int inner = std::max(8, size - 2 * border);
+    const float scale = std::min(1.0f, static_cast<float>(inner) / static_cast<float>(std::max(cw, ch)));
+    const int mw = std::max(1, static_cast<int>(std::lround(static_cast<float>(cw) * scale)));
+    const int mh = std::max(1, static_cast<int>(std::lround(static_cast<float>(ch) * scale)));
+    out.crop_x = x0;
+    out.crop_y = y0;
+    out.scale = scale;
+    out.border = border;
+    OsdImage& base = out.image;
+    base.w = mw + 2 * border;
+    base.h = mh + 2 * border;
+    base.rgba.assign(static_cast<std::size_t>(base.w) * static_cast<std::size_t>(base.h), kPanel);
     // Area average of the map pixels that fall in each panel pixel (transparent ones count as the panel colour).
     for (int py = 0; py < mh; ++py) {
-        const int sy0 = y0 + static_cast<int>(static_cast<float>(py) / scale_);
-        const int sy1 = std::max(sy0 + 1, std::min(y1 + 1, y0 + static_cast<int>(static_cast<float>(py + 1) / scale_)));
+        const int sy0 = y0 + static_cast<int>(static_cast<float>(py) / scale);
+        const int sy1 = std::max(sy0 + 1, std::min(y1 + 1, y0 + static_cast<int>(static_cast<float>(py + 1) / scale)));
         for (int px = 0; px < mw; ++px) {
-            const int sx0 = x0 + static_cast<int>(static_cast<float>(px) / scale_);
-            const int sx1 = std::max(sx0 + 1, std::min(x1 + 1, x0 + static_cast<int>(static_cast<float>(px + 1) / scale_)));
+            const int sx0 = x0 + static_cast<int>(static_cast<float>(px) / scale);
+            const int sx1 = std::max(sx0 + 1, std::min(x1 + 1, x0 + static_cast<int>(static_cast<float>(px + 1) / scale)));
             uint32_t r = 0, g = 0, b = 0, n = 0, opaque = 0;
             for (int sy = sy0; sy < sy1; ++sy)
                 for (int sx = sx0; sx < sx1; ++sx) {
@@ -119,33 +124,41 @@ bool Minimap::build(StageLibrary& library, int map, int size) {
                     b += (c >> 16) & 0xFF;
                 }
             if (opaque * 2 < n) continue;
-            put(base_, border_ + px, border_ + py, 0xFF000000u | (r / opaque) | ((g / opaque) << 8) | ((b / opaque) << 16));
+            put(base, border + px, border + py, 0xFF000000u | (r / opaque) | ((g / opaque) << 8) | ((b / opaque) << 16));
         }
     }
-    outline(base_, 0, 0, base_.w - 1, base_.h - 1, std::max(1, border_ / 2), kEdge);
-    return true;
+    outline(base, 0, 0, base.w - 1, base.h - 1, std::max(1, border / 2), kEdge);
+    out.ok = true;
+    return out;
 }
 
 const OsdImage* Minimap::frame(StageLibrary& library, int map, int scroll_x, int scroll_y, int view_w, int view_h, int size) {
     if (map != map_ || size != size_) {
+        if (pending_.valid()) pending_.wait();  // a drawing still running for the previous map
         map_ = map;
         size_ = size;
-        ok_ = build(library, map, size);
+        base_ = {};
+        pending_ = std::async(std::launch::async, [&library, map, size] { return build(library, map, size); });
+    }
+    if (pending_.valid()) {
+        if (pending_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return nullptr;
+        base_ = pending_.get();
         drawn_vw_ = -1;
     }
-    if (!ok_) return nullptr;
+    if (!base_.ok) return nullptr;
     if (scroll_x == drawn_sx_ && scroll_y == drawn_sy_ && view_w == drawn_vw_ && view_h == drawn_vh_) return &image_;
     drawn_sx_ = scroll_x;
     drawn_sy_ = scroll_y;
     drawn_vw_ = view_w;
     drawn_vh_ = view_h;
-    image_ = base_;
-    const auto to_x = [&](int mx) { return border_ + static_cast<int>(std::lround(static_cast<float>(mx - crop_x_) * scale_)); };
-    const auto to_y = [&](int my) { return border_ + static_cast<int>(std::lround(static_cast<float>(my - crop_y_) * scale_)); };
-    const int vx0 = std::clamp(to_x(scroll_x), border_, image_.w - border_ - 1);
-    const int vy0 = std::clamp(to_y(scroll_y), border_, image_.h - border_ - 1);
-    const int vx1 = std::clamp(to_x(scroll_x + view_w) - 1, vx0, image_.w - border_ - 1);
-    const int vy1 = std::clamp(to_y(scroll_y + view_h) - 1, vy0, image_.h - border_ - 1);
+    image_ = base_.image;
+    const int border = base_.border;
+    const auto to_x = [&](int mx) { return border + static_cast<int>(std::lround(static_cast<float>(mx - base_.crop_x) * base_.scale)); };
+    const auto to_y = [&](int my) { return border + static_cast<int>(std::lround(static_cast<float>(my - base_.crop_y) * base_.scale)); };
+    const int vx0 = std::clamp(to_x(scroll_x), border, image_.w - border - 1);
+    const int vy0 = std::clamp(to_y(scroll_y), border, image_.h - border - 1);
+    const int vx1 = std::clamp(to_x(scroll_x + view_w) - 1, vx0, image_.w - border - 1);
+    const int vy1 = std::clamp(to_y(scroll_y + view_h) - 1, vy0, image_.h - border - 1);
     outline(image_, vx0, vy0, vx1, vy1, 1, kView);
     const float r = std::max(2.5f, static_cast<float>(size_) / 45.0f);
     const float cx = static_cast<float>(vx0 + vx1 + 1) * 0.5f, cy = static_cast<float>(vy0 + vy1 + 1) * 0.5f;

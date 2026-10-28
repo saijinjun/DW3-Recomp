@@ -69,6 +69,8 @@ TEST(Minimap, ComposesTheCellsInPlace) {
 
 TEST(Minimap, ScalesIntoThePanelAndMarksTheView) {
     Minimap m;
+    m.frame(library(), 0, 0, 0, 128, 96, 100);  // starts drawing the map
+    m.wait();
     const dw3app::OsdImage* img = m.frame(library(), 0, 0, 0, 128, 96, 100);
     ASSERT_NE(img, nullptr);
     EXPECT_LE(img->w, 100);
@@ -81,5 +83,7 @@ TEST(Minimap, ScalesIntoThePanelAndMarksTheView) {
     EXPECT_NE(m.serial(), serial);
     const int dot_x = img->w * 3 / 4, dot_y = img->h * 96 / 2 / 128;
     EXPECT_EQ(at(*img, dot_x, dot_y), 0xFF2850F0u);
+    m.frame(library(), 7, 0, 0, 128, 96, 100);
+    m.wait();
     EXPECT_EQ(m.frame(library(), 7, 0, 0, 128, 96, 100), nullptr);
 }
