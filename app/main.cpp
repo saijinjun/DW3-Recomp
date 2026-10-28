@@ -303,6 +303,16 @@ int main(int argc, char** argv) {
         for (const std::string& m : report.messages) SDL_Log("settings: %s", m.c_str());
         if (!report.file_found) {
             std::string err;
+#if defined(DW3_ANDROID)
+            // First start on a phone: the quality-of-life options on, so the game plays smoother than the original
+            // out of the box. All of them can be changed (or set back to the original) in the in-game menu.
+            for (const auto& [id, value] : {std::pair<const char*, const char*>{"graphics.preset", "enhanced"},
+                                            {"graphics.widescreen", "16:9"},
+                                            {"gameplay.encounters", "half"},
+                                            {"gameplay.xp_multiplier", "2x"},
+                                            {"gameplay.text_speed", "fast"}})
+                if (!dw3app::set_text(stored, *dw3app::find_setting(id), value, err)) SDL_Log("settings: %s", err.c_str());
+#endif
             if (dw3app::save_settings_file(config_file, stored, err)) SDL_Log("created %s", dw3::platform::path_to_utf8(config_file).c_str());
             else SDL_Log("settings: %s", err.c_str());
         }
