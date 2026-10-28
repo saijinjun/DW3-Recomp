@@ -4,7 +4,7 @@
 //   gradle assembleRelease   (Gradle 8.12 or later) -PzigDir=<unpacked zig-aarch64-linux distribution>
 // The APK holds no game data: the player picks their own disc image on first start. A personal build for one player
 // may carry that player's disc and the module prepared from it: -PbundleDir=<dir with disc.bin.zst, module.so,
-// module.name and stamp> (see app/wizard/android_support.h). Never publish such an APK.
+// module.name and stamp, optionally hd-pack.zip and hd-pack.stamp> (see app/wizard/android_support.h). Never publish such an APK.
 
 import java.security.MessageDigest
 
@@ -124,7 +124,7 @@ tasks.register('dw3Toolchain') {
         if (bundleDir) {
             project.copy {
                 from file(bundleDir)
-                include 'disc.bin.zst', 'module.so', 'module.name', 'stamp'
+                include 'disc.bin.zst', 'module.so', 'module.name', 'stamp', 'hd-pack.zip', 'hd-pack.stamp'
                 into new File(assets, 'bundle')
             }
         }

@@ -358,6 +358,22 @@ int main(int argc, char** argv) {
         if (auto bundled = dw3setup::android::install_bundle(dw3::platform::user_data_dir(), bundle_error)) opt.disc = *bundled;
         else if (!bundle_error.empty()) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Digimon World 3", bundle_error.c_str(), nullptr);
     }
+    // ... and may carry HD backgrounds made from that disc: switched on once, when they are first unpacked.
+    {
+        std::string pack_error;
+        if (dw3setup::android::install_bundled_pack(dw3::platform::user_data_dir(), dw3setup::kPackName, pack_error)) {
+            for (const auto& [id, value] : {std::pair<const char*, const char*>{"graphics.texture_pack", dw3setup::kPackName},
+                                            {"graphics.hd_backgrounds", "true"}})
+                for (dw3app::Settings* target : {&stored, &active}) {
+                    std::string err;
+                    if (!dw3app::set_text(*target, *dw3app::find_setting(id), value, err)) SDL_Log("settings: %s", err.c_str());
+                }
+            std::string err;
+            if (!config_file.empty() && !dw3app::save_settings_file(config_file, stored, err)) SDL_Log("settings: %s", err.c_str());
+        } else if (!pack_error.empty()) {
+            SDL_Log("HD backgrounds: %s", pack_error.c_str());
+        }
+    }
 #endif
     std::optional<std::string> disc = dw3setup::locate_disc(opt.disc, active.system.disc_path, "game/Digimon World 3 (USA).cue", disc_usable);
     // Without recompiled code in the executable the game is a module built from the disc (see module_build.h).

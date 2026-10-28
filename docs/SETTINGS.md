@@ -170,6 +170,9 @@ Making a pack:
    any model in that program's format; `RealESRGAN_General_x4_v3` gave the best results of the ones we tried. Put the
    program and its `models` folder in `<user data dir>/tools`, or give their locations on the command line. The game
    and the pack tool never download anything by themselves.
+   Without a Vulkan GPU, `tools/models/realesrgan_cpu.py` (Python 3 with numpy and Pillow) runs the same compact models
+   on the processor from the same model files: pass `--upscaler tools/models/realesrgan_cpu.py`. It is much slower
+   (a whole disc at `--scale 2` takes a couple of hours on four cores).
 2. Play the areas you want improved with `--dump-textures <folder>`, for example
    `dw3recomp --dump-textures dump-town`. Every background image that is drawn for a while is recorded; leaving the
    game writes the folder. Use one folder per session; the pack tool takes several. Walk around to scroll through

@@ -30,6 +30,8 @@ constexpr const char* kBundleStampAsset = "bundle/stamp";
 constexpr const char* kBundleDiscAsset = "bundle/disc.bin.zst";
 constexpr const char* kBundleModuleAsset = "bundle/module.so";
 constexpr const char* kBundleModuleNameAsset = "bundle/module.name";
+constexpr const char* kBundlePackAsset = "bundle/hd-pack.zip";
+constexpr const char* kBundlePackStampAsset = "bundle/hd-pack.stamp";
 
 std::string read_text(const fs::path& path) {
     std::ifstream in(path, std::ios::binary);
@@ -259,6 +261,27 @@ std::optional<std::string> install_bundle(const fs::path& user_data, std::string
     }
     std::ofstream(dir / "stamp", std::ios::binary) << stamp;
     return utf8(cue);
+}
+
+bool install_bundled_pack(const fs::path& user_data, const std::string& pack_name, std::string& error) {
+    std::string stamp;
+    if (!read_small(kBundlePackStampAsset, stamp)) return false;
+    const fs::path dir = user_data / "texture-packs" / pack_name;
+    if (read_text(dir / "bundle.stamp") == stamp) return false;
+
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(user_data, ec);
+    const fs::path zip = user_data / "hd-pack.zip.part";
+    bool ok = copy_stream(kBundlePackAsset, zip, nullptr, error) && extract_zip(zip, dir, error);
+    fs::remove(zip, ec);
+    if (ok) {
+        std::ofstream out(dir / "bundle.stamp", std::ios::binary);
+        ok = static_cast<bool>(out << stamp);
+        if (!ok) error = "Cannot store the HD backgrounds in " + utf8(dir) + ".";
+    }
+    if (!ok) fs::remove_all(dir, ec);
+    return ok;
 }
 
 bool import_disc(const std::vector<std::string>& sources, const fs::path& user_data, const std::function<void(double)>& progress,
