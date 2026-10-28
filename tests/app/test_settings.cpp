@@ -433,7 +433,7 @@ TEST(Bits, RewardScalesUpToTheCapButNeverBelowTheGrant) {
 TEST(Difficulty, EnemyHpScalesWithinTheBattleField) {
     EXPECT_EQ(scaled_enemy_hp(120, enemy_hp_percent(0)), 120u);
     EXPECT_EQ(scaled_enemy_hp(120, enemy_hp_percent(1)), 72u);
-    EXPECT_EQ(scaled_enemy_hp(120, enemy_hp_percent(2)), 192u);
+    EXPECT_EQ(scaled_enemy_hp(120, enemy_hp_percent(2)), 156u);
     EXPECT_EQ(scaled_enemy_hp(1, 60), 1u);
     EXPECT_EQ(scaled_enemy_hp(0x3000, 160), 0x3FFFu);
 }
