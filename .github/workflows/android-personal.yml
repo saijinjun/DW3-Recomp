@@ -2,7 +2,7 @@ name: Android personal build
 
 on:
   push:
-    branches: [main, android-port]
+    branches: [main, android-port, game-upgrades]
   workflow_dispatch:
 
 concurrency:
