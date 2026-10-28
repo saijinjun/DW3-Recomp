@@ -60,6 +60,7 @@ constexpr Labels kLabels[] = {
     {"gameplay.xp_multiplier", "XP", 1},
     {"gameplay.bits_multiplier", "Bits", 1},
     {"gameplay.difficulty", "Difficulty", 1},
+    {"gameplay.heal_after_battle", "Auto Heal", 1},
     {"gameplay.text_speed", "Text Speed", 1},
     {"gameplay.auto_battle", "Auto Battle", 1},
     {"gameplay.battle_speed", "Battle Speed", 1},

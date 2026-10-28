@@ -201,6 +201,8 @@ const SettingInfo kSettings[] = {
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kXpMultipliers, false, DW3_FIELD(gameplay.xp_multiplier)},
     {"gameplay.bits_multiplier", "Bits multiplier", "Multiplies the bits (money) a won battle pays.",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kXpMultipliers, false, DW3_FIELD(gameplay.bits_multiplier)},
+    {"gameplay.heal_after_battle", "Heal after battle", "Refills the HP and MP of every Digimon when the results of a won battle end.",
+     Group::Gameplay, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(gameplay.heal_after_battle)},
     {"gameplay.difficulty", "Difficulty", "Enemies' HP in battle: normal as the original, easy (60%) or hard (130%).",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kDifficulties, false, DW3_FIELD(gameplay.difficulty)},
     {"gameplay.text_speed", "Text speed", "How fast message boxes print their text: normal, fast, or the whole box at once (a button still closes it).",

@@ -1,5 +1,7 @@
 #include "gameplay.h"
 
+#include <utility>
+
 #include "dw3/recomp.h"
 #include "gameplay_scaling.h"
 
@@ -47,6 +49,13 @@ constexpr uint32_t kWindowPrinting = 1;
 // end; the multiplier scales a rise that comes from the start of the results up to kBitsWindow frames after them.
 constexpr uint32_t kBits = 0x80048554;
 constexpr int kBitsWindow = 180;
+
+// The Digimon the player has (eight, 0x3DC bytes each, the first at kRoster): experience in the word at +0, then HP
+// and maximum HP in the halfwords at +8 and +10, MP and maximum MP at +12 and +14. A battle writes the party's HP back
+// as it ends (a knocked-out member keeps 1 HP), before its results screens.
+constexpr uint32_t kRoster = 0x80048C68, kRosterStride = 0x3DC, kRosterSize = 8;
+constexpr uint32_t kRosterHp = 8, kRosterMaxHp = 10, kRosterMp = 12, kRosterMaxMp = 14;
+constexpr uint16_t kMaxStat = 9999;
 
 enum Encounters { kNormal, kHalf, kOff, kDouble };
 
@@ -156,6 +165,16 @@ void GameplayHooks::tick() {
         in_results_ = true;
         bits_window_ = kBitsWindow;
     } else {
+        if (in_results_ && controller_.active().gameplay.heal_after_battle) {
+            // The results screens of a won battle have ended: the whole roster gets its HP and MP back.
+            for (uint32_t i = 0; i < kRosterSize; ++i) {
+                const uint32_t digimon = kRoster + kRosterStride * i;
+                for (const auto [value, max] : {std::pair{kRosterHp, kRosterMaxHp}, std::pair{kRosterMp, kRosterMaxMp}}) {
+                    const uint16_t top = dw3_read16(ctx, digimon + max);
+                    if (top > 0 && top <= kMaxStat) dw3_write16(ctx, digimon + value, top);
+                }
+            }
+        }
         in_results_ = false;
     }
     if (bits_window_ <= 0) return;
