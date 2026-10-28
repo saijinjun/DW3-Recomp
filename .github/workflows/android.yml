@@ -2,6 +2,7 @@ name: Android
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -50,12 +51,13 @@ jobs:
           echo "Using CMake ${cmake_pkg#cmake;}, NDK $(basename "$ANDROID_NDK_LATEST_HOME")"
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.12
 
       - name: Build
         working-directory: android
         run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease -PzigDir="$RUNNER_TEMP/zig" -PcmakeVersion="$CMAKE_VERSION" \
+          gradle --no-daemon assembleRelease -PzigDir="$RUNNER_TEMP/zig" -PcmakeVersion="$CMAKE_VERSION" \
             -PndkVersion="$NDK_VERSION" -PversionCode="${{ github.run_number }}"
           cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/DW3Recomp-android-arm64.apk"
 

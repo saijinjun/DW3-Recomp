@@ -1,7 +1,7 @@
 // The Android app: SDL's Java activity around libmain.so (the program, built from the top-level CMakeLists.txt), the zig
 // compiler as libzig.so (installed as a native library so that it may be run) and the rest of the toolchain the setup
 // builds the game module with, as the asset toolchain.zip. Build with
-//   ./gradlew assembleRelease -PzigDir=<unpacked zig-aarch64-linux distribution>
+//   gradle assembleRelease   (Gradle 8.12 or later) -PzigDir=<unpacked zig-aarch64-linux distribution>
 // The APK holds no game data: the player picks their own disc image on first start.
 
 import java.security.MessageDigest
@@ -31,7 +31,7 @@ android {
         externalNativeBuild {
             cmake {
                 arguments '-DDW3_BUILD_TESTS=OFF', '-DANDROID_PLATFORM=android-28', '-DANDROID_STL=c++_static',
-                          '-DCMAKE_BUILD_TYPE=Release'
+                          '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_POLICY_VERSION_MINIMUM=3.5'
                 targets 'dw3recomp', 'SDL3-shared'
             }
         }
