@@ -115,6 +115,21 @@ TEST(TouchControls, AppButtonsReportTapsOnce) {
     EXPECT_TRUE(t.take_actions().empty());
 }
 
+TEST(TouchControls, EncountersButtonCyclesAndLights) {
+    TouchControls t;
+    const auto& enc = find(t, "ENC");
+    t.finger_down(4, enc.x, enc.y, kW, kH);
+    t.finger_up(4);
+    const auto actions = t.take_actions();
+    ASSERT_EQ(actions.size(), 1u);
+    EXPECT_EQ(actions[0], TouchAction::Encounters);
+    t.image(kW, kH, 2);
+    const uint64_t serial = t.serial();
+    t.set_encounters_off(true);
+    t.image(kW, kH, 2);
+    EXPECT_NE(t.serial(), serial);
+}
+
 TEST(TouchControls, HiddenControlsHoldNothingAndATouchShowsThem) {
     TouchControls t;
     const auto& cross = find(t, "cross");

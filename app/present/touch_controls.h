@@ -1,5 +1,5 @@
 // On-screen controls for touch screens (the Android build): a d-pad, the four face buttons, L1/L2/R1/R2,
-// SELECT/START and a few app buttons (fast-forward, auto-battle, save and load state). Fingers are given in window pixels; the
+// SELECT/START and a few app buttons (fast-forward, auto-battle, random encounters, save and load state). Fingers are given in window pixels; the
 // controls report the console buttons they hold and draw themselves into a window-sized RGBA image that the
 // presenters blend over the picture. No SDL dependency.
 #pragma once
@@ -13,7 +13,7 @@
 
 namespace dw3app {
 
-enum class TouchAction { FastForward, SaveState, LoadState, AutoBattle };
+enum class TouchAction { FastForward, SaveState, LoadState, AutoBattle, Encounters };
 
 class TouchControls {
 public:
@@ -32,9 +32,10 @@ public:
     uint16_t buttons() const;
     // App buttons tapped since the last call.
     std::vector<TouchAction> take_actions();
-    // Shows the fast-forward and auto-battle buttons lit.
+    // Shows the fast-forward and auto-battle buttons lit, and the encounters button lit while encounters are off.
     void set_fast_forward(bool on);
     void set_auto_battle(bool on);
+    void set_encounters_off(bool off);
     // Size of the controls and how opaque they are, in percent (100 is the standard look).
     void set_style(int size_percent, int opacity_percent);
     // Counts fingers that landed on a control (for a short vibration per press).
@@ -70,6 +71,7 @@ private:
     bool visible_ = true;
     bool fast_forward_ = false;
     bool auto_battle_ = false;
+    bool encounters_off_ = false;
     float scale_ = 1.0f, opacity_ = 1.0f;
     uint32_t presses_ = 0;
     int w_ = 0, h_ = 0;

@@ -833,6 +833,12 @@ int main(int argc, char** argv) {
         settings.set("gameplay.auto_battle", on ? "true" : "false");
         presenter->notify(on ? "Auto-battle on" : "Auto-battle off");
     };
+    [[maybe_unused]] auto cycle_encounters = [&] {  // the touch controls' ENC button: normal, half, off
+        const int now = settings.active().gameplay.encounters;
+        const char* next = now == 0 ? "half" : now == 1 ? "off" : "normal";
+        settings.set("gameplay.encounters", next);
+        presenter->notify(std::string("Encounters ") + next);
+    };
     auto cycle_game_speed = [&] {
         const int next = (settings.active().gameplay.game_speed + 1) % 4;
         const std::string value = std::to_string(next + 1) + "x";
@@ -958,10 +964,12 @@ int main(int argc, char** argv) {
                 case dw3app::TouchAction::SaveState: save_slot(); break;
                 case dw3app::TouchAction::LoadState: load_slot(); break;
                 case dw3app::TouchAction::AutoBattle: toggle_auto_battle(); break;
+                case dw3app::TouchAction::Encounters: cycle_encounters(); break;
             }
         }
         touch.set_fast_forward(fast_forward.latched());
         touch.set_auto_battle(settings.active().gameplay.auto_battle);
+        touch.set_encounters_off(settings.active().gameplay.encounters == 2);
         touch.set_style(settings.active().controls.touch_size, settings.active().controls.touch_opacity);
         if (touch.presses() != touch_presses) {
             touch_presses = touch.presses();

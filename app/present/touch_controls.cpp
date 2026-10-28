@@ -106,6 +106,7 @@ void TouchControls::set_visible(bool visible) {
 
 void TouchControls::set_fast_forward(bool on) { fast_forward_ = on; }
 void TouchControls::set_auto_battle(bool on) { auto_battle_ = on; }
+void TouchControls::set_encounters_off(bool off) { encounters_off_ = off; }
 
 void TouchControls::set_style(int size_percent, int opacity_percent) {
     const float scale = static_cast<float>(size_percent) / 100.0f, opacity = static_cast<float>(opacity_percent) / 100.0f;
@@ -152,13 +153,16 @@ void TouchControls::layout(int w, int h) {
     const float mw = u * 0.09f, mh = u * 0.04f, my = fh - margin - mh;
     controls_.push_back({S::Rect, dw3::kPadSelect, -1, "SELECT", fw * 0.5f - mw - u * 0.03f, my, mw, mh, 0});
     controls_.push_back({S::Rect, dw3::kPadStart, -1, "START", fw * 0.5f + mw + u * 0.03f, my, mw, mh, 0});
-    // App buttons at the top centre.
-    const float aw = u * 0.075f, ah = u * 0.04f, ay = margin + ah;
-    const float gap = aw * 2 + u * 0.03f;
-    controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::SaveState), "SAVE", fw * 0.5f - gap * 1.5f, ay, aw, ah, 0});
-    controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::FastForward), ">>", fw * 0.5f - gap * 0.5f, ay, aw, ah, 0});
-    controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::AutoBattle), "AUTO", fw * 0.5f + gap * 0.5f, ay, aw, ah, 0});
-    controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::LoadState), "LOAD", fw * 0.5f + gap * 1.5f, ay, aw, ah, 0});
+    // App buttons at the top centre, at the standard size whatever the size setting: five in a row leave no room to grow
+    // between the shoulder buttons on a 16:9 screen.
+    const float u0 = static_cast<float>(std::min(w, h));
+    const float aw = u0 * 0.075f, ah = u0 * 0.04f, ay = margin + ah;
+    const float gap = aw * 2 + u0 * 0.03f;
+    controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::SaveState), "SAVE", fw * 0.5f - gap * 2.0f, ay, aw, ah, 0});
+    controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::FastForward), ">>", fw * 0.5f - gap, ay, aw, ah, 0});
+    controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::AutoBattle), "AUTO", fw * 0.5f, ay, aw, ah, 0});
+    controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::Encounters), "ENC", fw * 0.5f + gap, ay, aw, ah, 0});
+    controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::LoadState), "LOAD", fw * 0.5f + gap * 2.0f, ay, aw, ah, 0});
     fingers_.clear();
 }
 
@@ -245,7 +249,7 @@ const OsdImage& TouchControls::image(int window_w, int window_h, int downscale) 
     downscale = std::max(1, downscale);
     // What the picture depends on: the window, visibility, the lit app buttons and every held control.
     uint64_t state = (static_cast<uint64_t>(visible_) << 63) | (static_cast<uint64_t>(fast_forward_) << 62) |
-                     (static_cast<uint64_t>(auto_battle_) << 61) |
+                     (static_cast<uint64_t>(auto_battle_) << 61) | (static_cast<uint64_t>(encounters_off_) << 60) |
                      (static_cast<uint64_t>(buttons()) << 40);
     for (const auto& [id, f] : fingers_)
         if (f.control >= 0) state |= 1ull << std::min(f.control, 39);
@@ -280,7 +284,8 @@ void TouchControls::draw(int downscale) {
         c.rx *= k;
         c.ry *= k;
         const bool lit = held[i] || (c.action == static_cast<int>(TouchAction::FastForward) && fast_forward_) ||
-                         (c.action == static_cast<int>(TouchAction::AutoBattle) && auto_battle_);
+                         (c.action == static_cast<int>(TouchAction::AutoBattle) && auto_battle_) ||
+                         (c.action == static_cast<int>(TouchAction::Encounters) && encounters_off_);
         switch (c.shape) {
             case Control::Shape::DPad: {
                 // A plus shape; the pressed arms light up.
