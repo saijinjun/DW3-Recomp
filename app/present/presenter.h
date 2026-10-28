@@ -14,6 +14,7 @@
 #include "dw3/texrep/stage_library.h"
 #include "dw3/widescreen.h"
 #include "osd.h"
+#include "touch_controls.h"
 
 struct SDL_Window;
 
@@ -67,14 +68,35 @@ public:
     virtual bool present(dw3::Gpu& gpu, Capture* capture) = 0;
     // Called once with the machine's GPU before the game starts, so a presenter can install its rasterizer.
     virtual void attach(dw3::Gpu&) {}
+    // The window's drawing surface was replaced (Android, back from the background): present to the new one.
+    virtual void surface_changed() {}
     // Shows a short message over the top-left of the window for a couple of seconds. It is drawn after the
     // emulated picture and is not part of captures.
     void notify(std::string text);
     // A small line of text kept in the top-right corner (the frame rate); empty removes it. Not part of captures.
     void set_status(std::string text);
+    // On-screen touch controls to draw under the notifications (null: none). Not part of captures.
+    void set_touch_controls(TouchControls* touch) { touch_ = touch; }
 
 protected:
+    // What to blend over the window this frame: the notification alone, or the touch controls with the notification
+    // drawn into them. False when there is nothing. `serial` changes whenever the pixels do.
+    struct OverlayFrame {
+        const uint32_t* rgba = nullptr;
+        int w = 0, h = 0, x = 0, y = 0;
+        int dest_w = 0, dest_h = 0;  // drawn at this size in window pixels (0: w x h)
+        uint64_t serial = 0;
+        float opacity = 1.0f;
+    };
+    bool overlay_frame(int window_w, int window_h, OverlayFrame& out);
+
     Osd osd_;
+    TouchControls* touch_ = nullptr;
+
+private:
+    OsdImage composite_;
+    uint64_t composite_touch_ = ~0ull, composite_osd_ = ~0ull, composite_serial_ = 0;
+    int composite_osd_x_ = -1;
 };
 
 enum class RendererChoice { Auto, Gpu, Vulkan, D3D12, Metal, Software };

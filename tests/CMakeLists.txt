@@ -127,9 +127,10 @@ if(TARGET dw3scenario)
     endforeach()
 endif()
 
-# On-screen notification text rasterization (app/present/osd.cpp has no SDL dependency).
+# On-screen notification text rasterization and the touch controls (no SDL dependency).
 dw3_add_test(test_osd
-    SOURCES app/test_osd.cpp ${PROJECT_SOURCE_DIR}/app/present/osd.cpp
+    SOURCES app/test_osd.cpp app/test_touch_controls.cpp ${PROJECT_SOURCE_DIR}/app/present/osd.cpp
+            ${PROJECT_SOURCE_DIR}/app/present/touch_controls.cpp
     LIBS dw3runtime)
 target_include_directories(test_osd PRIVATE ${PROJECT_SOURCE_DIR}/app)
 
@@ -150,6 +151,6 @@ dw3_add_test(test_ingame
 
 # First-run wizard logic: state machine, disc identification, hashes, download plan, unpacking and the install sequence.
 dw3_add_test(test_wizard
-    SOURCES app/test_wizard.cpp app/test_module_build.cpp
+    SOURCES app/test_wizard.cpp app/test_module_build.cpp app/test_disc_import.cpp
     LIBS dw3wizard_core dw3texrep miniz)
 target_compile_definitions(test_wizard PRIVATE DW3_SOURCE_DIR="${DW3_TEST_SOURCE_DIR}")

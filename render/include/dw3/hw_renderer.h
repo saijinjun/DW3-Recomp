@@ -72,12 +72,13 @@
 
 namespace dw3 {
 
-// A window to present to. On Windows the native handle is enough; on macOS the NSWindow and its CAMetalLayer; elsewhere
-// the windowing library supplies the Vulkan surface through callbacks.
+// A window to present to. On Windows the native handle is enough; on macOS the NSWindow and its CAMetalLayer; on Android
+// the ANativeWindow; elsewhere the windowing library supplies the Vulkan surface through callbacks.
 struct NativeWindow {
     void* hwnd = nullptr;  // Windows: the HWND (used by both the Direct3D 12 and the Vulkan backend)
     void* cocoa_window = nullptr;  // macOS: the NSWindow
     void* metal_layer = nullptr;   // macOS: the CAMetalLayer to draw into
+    void* android_window = nullptr;  // Android: the ANativeWindow of the window's surface
     void* user = nullptr;
     // Creates a VkSurfaceKHR for the given VkInstance and returns its handle (0 on failure).
     uint64_t (*create_surface)(void* user, void* vk_instance) = nullptr;
@@ -126,6 +127,7 @@ struct HwOverlay {
     const uint32_t* rgba = nullptr;
     int w = 0, h = 0;
     int x = 0, y = 0;
+    int dest_w = 0, dest_h = 0;  // size drawn in window pixels (0: the image's size), filtered when it differs
     uint64_t serial = 0;
     float opacity = 1.0f;
 };
@@ -182,6 +184,9 @@ public:
     bool render_to_image(const DisplayState& display, ScaleMode mode, bool linear, const PostFx* post, int width, int height,
                          std::vector<uint32_t>& rgba);
     void set_vsync(bool enabled);
+    // Presents to a new surface of the window from now on (Android replaces the surface whenever the app returns
+    // from the background). Returns false if no swap chain could be made for it.
+    bool set_window(const NativeWindow& window);
     // True when the swap chain presents scRGB. Post-processing then ends in the HDR output transform of PostFx::hdr
     // (scaled to the nits it carries), and window captures are not available.
     bool hdr_active() const;

@@ -20,6 +20,11 @@ struct Toolchain {
     std::filesystem::path compiler;      // zig (used as `zig cc`)
     std::filesystem::path include_dir;   // contains dw3/recomp.h
     std::filesystem::path module_entry;  // module_entry.c
+    // For a module that is not built for the program's own desktop target (Android: a freestanding library with no
+    // libc to link against). An empty target means compile_target() of the configured OS and architecture.
+    std::string target;
+    std::vector<std::string> compile_flags, link_flags;
+    std::vector<std::filesystem::path> extra_sources;  // compiled and linked beside module_entry.c
 };
 
 // Looks beside the executable (<app_dir>/toolchain) and in the folder named by DW3_TOOLCHAIN. Empty when incomplete.
@@ -72,6 +77,7 @@ private:
     void set_status(PreparePhase phase, std::string status, double fraction = -1.0);
     PrepareResult fail(std::string message);
     bool compile_all(const std::filesystem::path& dir, const std::vector<std::string>& sources, std::vector<std::filesystem::path>& objects, std::string& error);
+    std::string target() const;
     std::vector<std::string> compile_command(const std::filesystem::path& source, const std::filesystem::path& object) const;
     std::vector<std::string> link_command(const std::filesystem::path& output, const std::filesystem::path& response_file) const;
 

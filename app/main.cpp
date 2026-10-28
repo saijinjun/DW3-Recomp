@@ -69,6 +69,11 @@
 // press, at the next point where the recompiled game can be interrupted safely.
 
 #include <SDL3/SDL.h>
+#if defined(DW3_ANDROID)
+#include <SDL3/SDL_main.h>  // SDL's Java activity calls SDL_main in libmain.so
+
+#include "android_support.h"
+#endif
 
 #include <array>
 #include <algorithm>
@@ -280,6 +285,9 @@ void on_quit_signal(int) {
 }  // namespace
 
 int main(int argc, char** argv) {
+#if defined(DW3_ANDROID)
+    dw3setup::android::init_environment();  // before anything reads or writes the user data directory
+#endif
     // Arguments are UTF-8 on every platform (on Windows main() would otherwise get them in the ANSI code page).
     std::vector<std::string> args = dw3::platform::command_line_utf8(argc, argv);
     std::vector<char*> arg_ptrs;
@@ -300,6 +308,10 @@ int main(int argc, char** argv) {
         }
     }
     dw3app::Settings active = stored;
+#if defined(DW3_ANDROID)
+    // A phone has no windows: the game always fills the screen.
+    if (active.graphics.display_mode == 0) active.graphics.display_mode = 1;
+#endif
     {
         // The preset first, so that the other flags override its members whatever their order.
         auto apply_flag = [&](const std::pair<std::string, std::string>& f) {
@@ -330,12 +342,21 @@ int main(int argc, char** argv) {
         prepared_module = dw3setup::module_path(dw3::platform::user_data_dir(), build_id, dw3::platform::host_os());
         std::error_code module_ec;
         if (!std::filesystem::exists(prepared_module, module_ec)) {
+#if defined(DW3_ANDROID)
+            std::string toolchain_error;
+            auto toolchain = dw3setup::android::toolchain(dw3::platform::user_data_dir(), toolchain_error);
+            if (!toolchain) {
+                SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Digimon World 3", toolchain_error.c_str(), nullptr);
+                return 1;
+            }
+#else
             const char* base = SDL_GetBasePath();
             auto toolchain = dw3setup::find_toolchain(base ? dw3::platform::path_from_utf8(base) : std::filesystem::path());
             if (!toolchain) {
                 std::fprintf(stderr, "this installation is incomplete: the toolchain folder next to the program is missing\n");
                 return 1;
             }
+#endif
             prepare = dw3setup::PrepareSetup{*toolchain, kGameConfigToml, build_id, false};
         }
     }
@@ -488,6 +509,11 @@ int main(int argc, char** argv) {
     refresh_display_state();
     int last_fullscreen_mode = active.graphics.display_mode != 0 ? active.graphics.display_mode : 1;
     presenter->attach(machine.gpu());
+#if defined(DW3_ANDROID)
+    // On-screen controls; they hide while a gamepad is used and come back when the screen is touched.
+    dw3app::TouchControls touch;
+    presenter->set_touch_controls(&touch);
+#endif
     const bool software_presenter = std::string(presenter->name()).find("software") != std::string::npos;
     if (software_presenter && (active.graphics.hd_backgrounds || active.graphics.seamless_bg || !opt.dump_textures.empty()))
         SDL_Log("texture replacement, seamless backgrounds and dumping need the GPU renderer; ignored");
@@ -776,6 +802,25 @@ int main(int argc, char** argv) {
             if ((e.type >= SDL_EVENT_DISPLAY_FIRST && e.type <= SDL_EVENT_DISPLAY_LAST) || e.type == SDL_EVENT_WINDOW_DISPLAY_CHANGED ||
                 e.type == SDL_EVENT_WINDOW_HDR_STATE_CHANGED)
                 display_changed = true;
+#if defined(DW3_ANDROID)
+            if (e.type == SDL_EVENT_FINGER_DOWN || e.type == SDL_EVENT_FINGER_MOTION) {
+                int ww = 0, wh = 0;
+                SDL_GetWindowSizeInPixels(window, &ww, &wh);
+                const float x = e.tfinger.x * static_cast<float>(ww), y = e.tfinger.y * static_cast<float>(wh);
+                if (e.type == SDL_EVENT_FINGER_DOWN) touch.finger_down(e.tfinger.fingerID, x, y, ww, wh);
+                else touch.finger_move(e.tfinger.fingerID, x, y, ww, wh);
+            } else if (e.type == SDL_EVENT_FINGER_UP || e.type == SDL_EVENT_FINGER_CANCELED) {
+                touch.finger_up(e.tfinger.fingerID);
+            } else if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+                touch.set_visible(false);
+            } else if (e.type == SDL_EVENT_WILL_ENTER_BACKGROUND) {
+                touch.release_all();
+            } else if (e.type == SDL_EVENT_DID_ENTER_FOREGROUND) {
+                // The app was away: the window has a new surface, and real time moved on without the game.
+                presenter->surface_changed();
+                pacing_reset = true;
+            }
+#endif
             if (host_input.handle_event(e)) continue;
             if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
                 switch (e.key.scancode) {
@@ -798,6 +843,17 @@ int main(int argc, char** argv) {
             refresh_hz = dw3app::window_refresh_hz(window);
         }
         host_input.update();
+#if defined(DW3_ANDROID)
+        host_input.touch_buttons = touch.buttons();
+        for (const dw3app::TouchAction action : touch.take_actions()) {
+            switch (action) {
+                case dw3app::TouchAction::FastForward: toggle_fast_forward_latch(); break;
+                case dw3app::TouchAction::SaveState: save_slot(); break;
+                case dw3app::TouchAction::LoadState: load_slot(); break;
+            }
+        }
+        touch.set_fast_forward(fast_forward.latched());
+#endif
         fast_forward.set_held(host_input.fast_forward_held());
         if (g_quit_requested) dw3::host::Host::stop();
         const bool last = opt.max_frames >= 0 && static_cast<int64_t>(frame) >= opt.max_frames;

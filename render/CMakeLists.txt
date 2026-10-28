@@ -145,7 +145,9 @@ if(DW3_HAVE_PLUME)
     target_include_directories(dw3render PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
    
     target_link_libraries(dw3render PRIVATE plume ${CMAKE_DL_LIBS})
-    if(DW3_OS STREQUAL "linux")
+    if(ANDROID)
+        target_link_libraries(dw3render PRIVATE android)  # ANativeWindow
+    elseif(DW3_OS STREQUAL "linux")
         target_link_libraries(dw3render PRIVATE ${X11_LIBRARIES})
         target_include_directories(dw3render SYSTEM PRIVATE ${X11_INCLUDE_DIR})
     endif()

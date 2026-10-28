@@ -56,7 +56,15 @@ std::vector<Asset> model_assets() {
 
 DownloadPlan plan_for(Os os, Arch arch) {
     DownloadPlan plan;
-    if (auto up = upscaler_asset(os, arch)) plan.assets.push_back(*up);
+#if defined(DW3_ANDROID)
+    // The upscaler is a desktop program. A phone can use a texture pack made on a computer.
+    const std::optional<Asset> up;
+    (void)os;
+    (void)arch;
+#else
+    const std::optional<Asset> up = upscaler_asset(os, arch);
+#endif
+    if (up) plan.assets.push_back(*up);
     else plan.unsupported = "There is no build of the upscaler for this platform.";
     for (const Asset& m : model_assets()) plan.assets.push_back(m);
     return plan;

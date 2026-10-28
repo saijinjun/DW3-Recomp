@@ -739,6 +739,8 @@ bool HwRenderer::Impl::create_swapchain(const NativeWindow& window) {
     RenderWindow w{};
     w.window = window.cocoa_window;
     w.view = window.metal_layer;
+#elif defined(__ANDROID__)
+    RenderWindow w = static_cast<RenderWindow>(window.android_window);
 #else
     RenderWindow w{};
     w.userData = window.user;
@@ -1523,8 +1525,8 @@ void HwRenderer::Impl::draw_overlay(uint32_t w, uint32_t h, const HwOverlay& o) 
     OsdParams p{};
     p.dest[0] = static_cast<float>(o.x);
     p.dest[1] = static_cast<float>(o.y);
-    p.dest[2] = static_cast<float>(o.w);
-    p.dest[3] = static_cast<float>(o.h);
+    p.dest[2] = static_cast<float>(o.dest_w > 0 ? o.dest_w : o.w);
+    p.dest[3] = static_cast<float>(o.dest_h > 0 ? o.dest_h : o.h);
     p.window[0] = static_cast<float>(w);
     p.window[1] = static_cast<float>(h);
     p.opacity = o.opacity;
@@ -1923,6 +1925,15 @@ bool HwRenderer::read_display(const VramRect& r, std::vector<uint32_t>& rgba) {
         }
     m.readback_buf->unmap();
     return true;
+}
+
+bool HwRenderer::set_window(const NativeWindow& window) {
+    Impl& m = *impl_;
+    if (!m.has_window) return false;
+    m.record_draws();
+    m.submit();
+    m.native_window = window;
+    return m.recreate_swapchain();
 }
 
 bool HwRenderer::present(const DisplayState& shown, ScaleMode mode, bool linear, std::vector<uint32_t>* capture,
