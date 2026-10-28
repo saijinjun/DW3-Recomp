@@ -311,7 +311,8 @@ int main(int argc, char** argv) {
                                             {"graphics.widescreen", "16:9"},
                                             {"gameplay.encounters", "half"},
                                             {"gameplay.xp_multiplier", "2x"},
-                                            {"gameplay.text_speed", "fast"}})
+                                            {"gameplay.text_speed", "fast"},
+                                            {"system.fast_forward_speed", "4x"}})
                 if (!dw3app::set_text(stored, *dw3app::find_setting(id), value, err)) SDL_Log("settings: %s", err.c_str());
 #endif
             if (dw3app::save_settings_file(config_file, stored, err)) SDL_Log("created %s", dw3::platform::path_to_utf8(config_file).c_str());
@@ -774,6 +775,7 @@ int main(int argc, char** argv) {
     dw3app::PresentCadence present_cadence;
     bool pacer_started = false, fast_forwarding = false, display_changed = false, fps_shown = false;
     uint64_t fps_window_start = SDL_GetTicksNS();
+    uint64_t last_shown_ns = 0;  // when a frame was last presented
     int fps_frames = 0;
     constexpr uint64_t kFpsWindowNs = 500'000'000;
     dw3app::FrameStats frame_stats;
@@ -904,9 +906,18 @@ int main(int argc, char** argv) {
         present_cadence.set_enabled(shown.frame_pacing == 1 && shown.vsync != 0 && !unpaced && !fast_forward.active() &&
                                     settings.active().gameplay.game_speed == 0);
         present_cadence.set_reported_hz(refresh_hz);
-        const int presents = present_cadence.plan_frame();
+        const int planned = present_cadence.plan_frame();
         const uint64_t present_began_ns = SDL_GetTicksNS();
-        presenter->present(machine.gpu(), want_shot ? &capture : nullptr);
+        // Faster than real time the frames come quicker than the display shows them, so only one per refresh is
+        // presented. Where vsync cannot be turned off (most phones) every present would wait for one and cap the speed.
+        const bool sped_up = fast_forward.active() || settings.active().gameplay.game_speed != 0;
+        const uint64_t refresh_ns = static_cast<uint64_t>(1e9 / (refresh_hz > 0.0 ? refresh_hz : 60.0));
+        const bool skip_present = sped_up && !want_shot && !unpaced && present_began_ns - last_shown_ns < refresh_ns * 9 / 10;
+        const int presents = skip_present ? 0 : planned;
+        if (!skip_present) {
+            presenter->present(machine.gpu(), want_shot ? &capture : nullptr);
+            last_shown_ns = present_began_ns;
+        }
         uint64_t last_present_ns = presents > 1 ? SDL_GetTicksNS() : 0;
         for (int again = 1; again < presents; ++again) {
             presenter->present(machine.gpu(), nullptr);
