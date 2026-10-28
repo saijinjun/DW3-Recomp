@@ -69,21 +69,25 @@ TEST(Minimap, ComposesTheCellsInPlace) {
 
 TEST(Minimap, ScalesIntoThePanelAndMarksTheView) {
     Minimap m;
-    m.frame(library(), 0, 0, 0, 128, 96, 100);  // starts drawing the map
+    m.frame(library(), 0, 0, 0, 128, 96, 64, 48, 100);  // starts drawing the map
     m.wait();
-    const dw3app::OsdImage* img = m.frame(library(), 0, 0, 0, 128, 96, 100);
+    const dw3app::OsdImage* img = m.frame(library(), 0, 0, 0, 128, 96, 64, 48, 100);
     ASSERT_NE(img, nullptr);
     EXPECT_LE(img->w, 100);
     EXPECT_LT(img->h, img->w);  // the map is twice as wide as it is tall
     const uint64_t serial = m.serial();
-    m.frame(library(), 0, 0, 0, 128, 96, 100);
+    m.frame(library(), 0, 0, 0, 128, 96, 64, 48, 100);
     EXPECT_EQ(m.serial(), serial);  // nothing moved
-    // The dot sits at the middle of the view: the left half of the map, upper part.
-    img = m.frame(library(), 0, 128, 0, 128, 96, 100);
+    // The dot sits where the party stands: here the middle of the view, in the right half of the map, upper part.
+    img = m.frame(library(), 0, 128, 0, 128, 96, 192, 48, 100);
     EXPECT_NE(m.serial(), serial);
     const int dot_x = img->w * 3 / 4, dot_y = img->h * 96 / 2 / 128;
     EXPECT_EQ(at(*img, dot_x, dot_y), 0xFF2850F0u);
-    m.frame(library(), 7, 0, 0, 128, 96, 100);
+    // At the edge of a map the camera stops and the party walks off the middle of the view; the dot follows the party.
+    img = m.frame(library(), 0, 0, 0, 128, 96, 16, 80, 100);  // 2 pixels of border, 96 / 256 panel pixels per map pixel
+    EXPECT_EQ(at(*img, 2 + 6, 2 + 30), 0xFF2850F0u);
+    EXPECT_NE(at(*img, 2 + 24, 2 + 18), 0xFF2850F0u);  // the middle of the view
+    m.frame(library(), 7, 0, 0, 128, 96, 64, 48, 100);
     m.wait();
-    EXPECT_EQ(m.frame(library(), 7, 0, 0, 128, 96, 100), nullptr);
+    EXPECT_EQ(m.frame(library(), 7, 0, 0, 128, 96, 64, 48, 100), nullptr);
 }

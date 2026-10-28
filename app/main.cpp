@@ -1010,8 +1010,15 @@ int main(int argc, char** argv) {
                 SDL_GetWindowSizeInPixels(window, &ww, &wh);
                 const int u = std::min(ww, wh);
                 if (known && minimap_stale < 8) {
+                    // The party: the field's player object, whose position is in map pixels (where its feet are).
+                    constexpr uint32_t kPlayerObject = 0x8004ADC0, kPlayerX = 0x58, kPlayerY = 0x5C;
                     const dw3::DisplayState& shown_area = machine.gpu().display();
-                    image = minimap.frame(*library, map, sx, sy, shown_area.width, shown_area.height, u * 22 / 100);
+                    int px = sx + shown_area.width / 2, py = sy + shown_area.height / 2;
+                    if (const uint32_t player = dw3_read32(&machine.ctx(), kPlayerObject)) {
+                        px = static_cast<int32_t>(dw3_read32(&machine.ctx(), player + kPlayerX));
+                        py = static_cast<int32_t>(dw3_read32(&machine.ctx(), player + kPlayerY));
+                    }
+                    image = minimap.frame(*library, map, sx, sy, shown_area.width, shown_area.height, px, py, u * 22 / 100);
                 }
                 presenter->set_panel(image, u * 5 / 100, u * 25 / 100, minimap.serial());
             }

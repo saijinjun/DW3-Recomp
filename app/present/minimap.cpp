@@ -132,7 +132,8 @@ Minimap::Base Minimap::build(StageLibrary& library, int map, int size) {
     return out;
 }
 
-const OsdImage* Minimap::frame(StageLibrary& library, int map, int scroll_x, int scroll_y, int view_w, int view_h, int size) {
+const OsdImage* Minimap::frame(StageLibrary& library, int map, int scroll_x, int scroll_y, int view_w, int view_h, int party_x,
+                               int party_y, int size) {
     if (map != map_ || size != size_) {
         if (pending_.valid()) pending_.wait();  // a drawing still running for the previous map
         map_ = map;
@@ -146,11 +147,15 @@ const OsdImage* Minimap::frame(StageLibrary& library, int map, int scroll_x, int
         drawn_vw_ = -1;
     }
     if (!base_.ok) return nullptr;
-    if (scroll_x == drawn_sx_ && scroll_y == drawn_sy_ && view_w == drawn_vw_ && view_h == drawn_vh_) return &image_;
+    if (scroll_x == drawn_sx_ && scroll_y == drawn_sy_ && view_w == drawn_vw_ && view_h == drawn_vh_ && party_x == drawn_px_ &&
+        party_y == drawn_py_)
+        return &image_;
     drawn_sx_ = scroll_x;
     drawn_sy_ = scroll_y;
     drawn_vw_ = view_w;
     drawn_vh_ = view_h;
+    drawn_px_ = party_x;
+    drawn_py_ = party_y;
     image_ = base_.image;
     const int border = base_.border;
     const auto to_x = [&](int mx) { return border + static_cast<int>(std::lround(static_cast<float>(mx - base_.crop_x) * base_.scale)); };
@@ -161,7 +166,8 @@ const OsdImage* Minimap::frame(StageLibrary& library, int map, int scroll_x, int
     const int vy1 = std::clamp(to_y(scroll_y + view_h) - 1, vy0, image_.h - border - 1);
     outline(image_, vx0, vy0, vx1, vy1, 1, kView);
     const float r = std::max(2.5f, static_cast<float>(size_) / 45.0f);
-    const float cx = static_cast<float>(vx0 + vx1 + 1) * 0.5f, cy = static_cast<float>(vy0 + vy1 + 1) * 0.5f;
+    const float cx = static_cast<float>(std::clamp(to_x(party_x), border, image_.w - border - 1));
+    const float cy = static_cast<float>(std::clamp(to_y(party_y), border, image_.h - border - 1));
     disc(image_, cx, cy, r + 1.0f, kDotRing);
     disc(image_, cx, cy, r, kDot);
     ++serial_;
