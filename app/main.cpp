@@ -287,6 +287,7 @@ void on_quit_signal(int) {
 int main(int argc, char** argv) {
 #if defined(DW3_ANDROID)
     dw3setup::android::init_environment();  // before anything reads or writes the user data directory
+    dw3setup::android::capture_log();       // a three-finger tap shows it
 #endif
     // Arguments are UTF-8 on every platform (on Windows main() would otherwise get them in the ANSI code page).
     std::vector<std::string> args = dw3::platform::command_line_utf8(argc, argv);
@@ -515,6 +516,10 @@ int main(int argc, char** argv) {
         return 1;
     }
     SDL_Log("presenting with %s", presenter->name());
+#if defined(DW3_ANDROID)
+    if (std::string(presenter->name()).find("software") != std::string::npos)
+        dw3setup::android::show_log("The GPU renderer did not start");
+#endif
     dw3app::MonitorList monitors;
     double refresh_hz = 0.0;
     bool display_hdr = false;
@@ -825,7 +830,15 @@ int main(int argc, char** argv) {
                 int ww = 0, wh = 0;
                 SDL_GetWindowSizeInPixels(window, &ww, &wh);
                 const float x = e.tfinger.x * static_cast<float>(ww), y = e.tfinger.y * static_cast<float>(wh);
-                if (e.type == SDL_EVENT_FINGER_DOWN) touch.finger_down(e.tfinger.fingerID, x, y, ww, wh);
+                if (e.type == SDL_EVENT_FINGER_DOWN) {
+                    touch.finger_down(e.tfinger.fingerID, x, y, ww, wh);
+                    int fingers = 0;
+                    SDL_free(SDL_GetTouchFingers(e.tfinger.touchID, &fingers));
+                    if (fingers >= 3) {
+                        touch.release_all();
+                        dw3setup::android::show_log("Diagnostics");
+                    }
+                }
                 else touch.finger_move(e.tfinger.fingerID, x, y, ww, wh);
             } else if (e.type == SDL_EVENT_FINGER_UP || e.type == SDL_EVENT_FINGER_CANCELED) {
                 touch.finger_up(e.tfinger.fingerID);

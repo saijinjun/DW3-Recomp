@@ -2,11 +2,16 @@
 
 #include <SDL3/SDL.h>
 #include <dlfcn.h>
+#include <unistd.h>
 #include <zstd.h>
 
+#include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <fstream>
+#include <mutex>
 #include <sstream>
+#include <thread>
 
 #include "disc_import.h"
 #include "dw3/platform.h"
@@ -125,7 +130,58 @@ fs::path native_library_dir() {
     return fs::path(info.dli_fname).parent_path();
 }
 
+std::mutex log_mutex;
+std::deque<std::string> log_lines;
+SDL_LogOutputFunction default_log = nullptr;
+void* default_log_data = nullptr;
+
+void keep_log(void* userdata, int category, SDL_LogPriority priority, const char* message) {
+    {
+        std::lock_guard<std::mutex> lock(log_mutex);
+        log_lines.emplace_back(message ? message : "");
+        while (log_lines.size() > 40) log_lines.pop_front();
+    }
+    if (default_log) default_log(default_log_data, category, priority, message);
+}
+
 }  // namespace
+
+void capture_log() {
+    SDL_GetLogOutputFunction(&default_log, &default_log_data);
+    SDL_SetLogOutputFunction(keep_log, nullptr);
+    // stdout and stderr go nowhere on Android; the renderer library reports its errors there. Route them into the log.
+    int fds[2];
+    if (pipe(fds) != 0) return;
+    setvbuf(stdout, nullptr, _IOLBF, 0);
+    setvbuf(stderr, nullptr, _IONBF, 0);
+    dup2(fds[1], STDOUT_FILENO);
+    dup2(fds[1], STDERR_FILENO);
+    close(fds[1]);
+    std::thread([fd = fds[0]] {
+        std::string line;
+        char buffer[512];
+        ssize_t n;
+        while ((n = read(fd, buffer, sizeof buffer)) > 0) {
+            for (ssize_t i = 0; i < n; ++i) {
+                if (buffer[i] != '\n') {
+                    line.push_back(buffer[i]);
+                    continue;
+                }
+                SDL_Log("%s", line.c_str());
+                line.clear();
+            }
+        }
+    }).detach();
+}
+
+void show_log(const char* title) {
+    std::string text;
+    {
+        std::lock_guard<std::mutex> lock(log_mutex);
+        for (const std::string& line : log_lines) text += line + "\n";
+    }
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, title, text.empty() ? "(nothing logged)" : text.c_str(), nullptr);
+}
 
 void init_environment() {
     const char* internal = SDL_GetAndroidInternalStoragePath();
