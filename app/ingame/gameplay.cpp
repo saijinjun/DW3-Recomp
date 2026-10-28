@@ -42,6 +42,11 @@ constexpr uint32_t kWindowState = 12, kWindowPrinted = 164, kWindowTimer = 168, 
 constexpr uint32_t kWindowTypewriter = 193, kWindowBoxFull = 195;
 constexpr uint32_t kWindowPrinting = 1;
 
+// The purse, in bits (read by the shops and the status screen). A won battle's bits are added as its results screens
+// end; the multiplier scales a rise that comes from the start of the results up to kBitsWindow frames after them.
+constexpr uint32_t kBits = 0x80048554;
+constexpr int kBitsWindow = 180;
+
 enum Encounters { kNormal, kHalf, kOff, kDouble };
 
 }  // namespace
@@ -124,6 +129,29 @@ GameplayHooks::GameplayHooks(dw3::Machine& machine, SettingsController& controll
     machine_.override_function(kAttackTask, &GameplayHook::attack_task);
     machine_.override_function(kFinaliseShare, &GameplayHook::finalise_share);
     machine_.override_function(kTextWindowTick, &GameplayHook::text_window_tick);
+}
+
+void GameplayHooks::tick() {
+    RecompContext* ctx = &machine_.ctx();
+    const uint32_t bits = dw3_read32(ctx, kBits);
+    if (dw3_read32(ctx, kGameMode) == kResultsMode) {
+        if (!in_results_) bits_before_ = bits;
+        in_results_ = true;
+        bits_window_ = kBitsWindow;
+    } else {
+        in_results_ = false;
+    }
+    if (bits_window_ <= 0) return;
+    if (bits > bits_before_) {
+        if (!in_results_) {
+            const int multiplier = bits_multiplier(controller_.active().gameplay.bits_multiplier);
+            if (multiplier > 1) dw3_write32(ctx, kBits, scaled_bits(bits_before_, bits - bits_before_, multiplier));
+            bits_window_ = 0;
+        }
+        return;
+    }
+    if (bits < bits_before_) bits_before_ = bits;
+    if (!in_results_) --bits_window_;
 }
 
 GameplayHooks::~GameplayHooks() {

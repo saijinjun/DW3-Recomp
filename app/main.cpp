@@ -312,6 +312,7 @@ int main(int argc, char** argv) {
                                             {"graphics.widescreen", "16:9"},
                                             {"gameplay.encounters", "half"},
                                             {"gameplay.xp_multiplier", "2x"},
+                                            {"gameplay.bits_multiplier", "2x"},
                                             {"gameplay.text_speed", "fast"},
                                             {"system.fast_forward_speed", "4x"},
                                             {"system.resume", "true"}})
@@ -965,6 +966,7 @@ int main(int argc, char** argv) {
         const bool last = opt.max_frames >= 0 && static_cast<int64_t>(frame) >= opt.max_frames;
         const bool periodic = opt.shot_every > 0 && frame % static_cast<uint64_t>(opt.shot_every) == 0;
         const bool want_shot = periodic || (last && !opt.screenshot.empty());
+        gameplay.tick();
         constexpr uint32_t kGameMode = 0x800554D0;
         const uint32_t game_mode = dw3_read32(&machine.ctx(), kGameMode);
         if (const bool field = game_mode == 2, battle = game_mode == 6 || game_mode == 0x14;

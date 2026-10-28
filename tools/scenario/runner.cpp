@@ -738,6 +738,7 @@ int main(int argc, char** argv) {
                 stats_before = hw->stats();
             }};
             settings_screen.apply_pending();
+            gameplay.tick();
             if (hw) hw->set_wide_mode(dw3::wide_mode_for_game_mode(read_ram(0x800554D0, 4)));
             last_frame = base + static_cast<int64_t>(frame);
             timeline.advance(last_frame, read_ram);

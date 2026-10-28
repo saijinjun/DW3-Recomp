@@ -21,6 +21,20 @@ inline uint32_t scaled_experience(uint32_t amount, int multiplier) {
     return static_cast<uint32_t>(std::min<uint64_t>(scaled, kMaxExperience));
 }
 
+// Bits (money) multiplier for a gameplay.bits_multiplier choice: the same steps as experience.
+inline int bits_multiplier(int choice) { return xp_multiplier(choice); }
+
+// The largest purse a scaled battle reward fills up to (the screens that show bits print six digits safely).
+constexpr uint32_t kMaxBits = 999999;
+
+// The purse after a battle reward `gained` on top of `before` is multiplied by `multiplier`. It never drops below
+// what the game itself granted and never passes kMaxBits by scaling.
+inline uint32_t scaled_bits(uint32_t before, uint32_t gained, int multiplier) {
+    const uint64_t granted = static_cast<uint64_t>(before) + gained;
+    const uint64_t scaled = static_cast<uint64_t>(before) + static_cast<uint64_t>(gained) * static_cast<uint64_t>(std::max(multiplier, 1));
+    return static_cast<uint32_t>(std::max(granted, std::min<uint64_t>(scaled, kMaxBits)));
+}
+
 // Text speed (gameplay.text_speed): normal, fast, instant.
 enum class TextSpeed { Normal, Fast, Instant };
 constexpr int kFastTextChars = 3;  // characters a window prints per frame at "fast"
