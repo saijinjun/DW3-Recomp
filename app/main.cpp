@@ -313,6 +313,7 @@ int main(int argc, char** argv) {
                                             {"gameplay.encounters", "half"},
                                             {"gameplay.xp_multiplier", "2x"},
                                             {"gameplay.bits_multiplier", "2x"},
+                                            {"gameplay.battle_speed", "2x"},
                                             {"gameplay.text_speed", "fast"},
                                             {"system.fast_forward_speed", "4x"},
                                             {"system.resume", "true"}})

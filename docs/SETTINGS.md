@@ -77,6 +77,7 @@ everything else applies immediately.
 | `gameplay.god_mode` | bool | `--god-mode` |
 | `gameplay.xp_multiplier` | `1x`, `2x`, `3x`, `5x`, `10x` | `--xp-multiplier` |
 | `gameplay.bits_multiplier` | `1x`, `2x`, `3x`, `5x`, `10x` | |
+| `gameplay.difficulty` | `normal`, `easy`, `hard` | |
 | `gameplay.text_speed` | `normal`, `fast`, `instant` | `--text-speed` |
 | `gameplay.auto_battle` | bool | |
 | `gameplay.battle_speed` | `1x`, `2x`, `3x`, `4x` | |

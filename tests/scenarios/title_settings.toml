@@ -70,7 +70,7 @@ timeout = 300
 at = 1020
 label = "gameplay page, header centred on its text"
 display_enabled = true
-ram = [{ addr = 0x800D9298, size = 2, value = 111 }, { addr = 0x800D9418, size = 2, value = 106 }]
+ram = [{ addr = 0x800D9298, size = 2, value = 107 }, { addr = 0x800D9418, size = 2, value = 106 }]
 screenshot = true
 
 # The screen stays open for as long as it is left alone (the menu task would time out on its own).

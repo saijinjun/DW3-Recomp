@@ -17,7 +17,8 @@ constexpr uint32_t kAttackerSide = 80;
 // Combatants: 32-byte records, three per side, the party's first at kRecords and the enemies' 96 bytes after;
 // kActive holds, per side, the index of the member being acted on. The attacker's side is 0 for the party.
 constexpr uint32_t kRecords = 0x800A31F8, kActive = 0x800A31F0;
-constexpr uint32_t kRecordSize = 32, kSideStride = 96, kHp = 8;
+constexpr uint32_t kRecordSize = 32, kSideStride = 96, kHp = 8, kMaxHp = 6, kSideMembers = 3;
+constexpr uint32_t kBattleMode = 6;
 constexpr uint32_t kPartySide = 0, kEnemySide = 1;
 constexpr uint16_t kLift = 0x4000;
 
@@ -133,8 +134,24 @@ GameplayHooks::GameplayHooks(dw3::Machine& machine, SettingsController& controll
 
 void GameplayHooks::tick() {
     RecompContext* ctx = &machine_.ctx();
+    const uint32_t mode = dw3_read32(ctx, kGameMode);
+    // Difficulty scales each enemy's HP once, when its record first shows full health; a record whose maximum is not the
+    // one written here is a new enemy (the next battle, or one that joins).
+    if (mode == kBattleMode) {
+        const int percent = enemy_hp_percent(controller_.active().gameplay.difficulty);
+        for (uint32_t i = 0; i < kSideMembers; ++i) {
+            const uint32_t record = kRecords + kSideStride * kEnemySide + kRecordSize * i;
+            const uint16_t max_hp = dw3_read16(ctx, record + kMaxHp), hp = dw3_read16(ctx, record + kHp);
+            if (percent == 100 || max_hp == 0 || max_hp == scaled_max_hp_[i] || hp != max_hp) continue;
+            scaled_max_hp_[i] = static_cast<uint16_t>(scaled_enemy_hp(max_hp, percent));
+            dw3_write16(ctx, record + kMaxHp, scaled_max_hp_[i]);
+            dw3_write16(ctx, record + kHp, scaled_max_hp_[i]);
+        }
+    } else {
+        scaled_max_hp_ = {};
+    }
     const uint32_t bits = dw3_read32(ctx, kBits);
-    if (dw3_read32(ctx, kGameMode) == kResultsMode) {
+    if (mode == kResultsMode) {
         if (!in_results_) bits_before_ = bits;
         in_results_ = true;
         bits_window_ = kBitsWindow;

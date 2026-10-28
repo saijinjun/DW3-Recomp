@@ -35,6 +35,15 @@ inline uint32_t scaled_bits(uint32_t before, uint32_t gained, int multiplier) {
     return static_cast<uint32_t>(std::max(granted, std::min<uint64_t>(scaled, kMaxBits)));
 }
 
+// Difficulty (gameplay.difficulty: normal, easy, hard): enemies start a battle with this percentage of their HP.
+inline int enemy_hp_percent(int choice) { return choice == 1 ? 60 : choice == 2 ? 160 : 100; }
+
+// Enemy HP scaled by `percent`, at least 1 and never past what the battle's HP field is kept to (0x3FFF).
+inline uint32_t scaled_enemy_hp(uint32_t hp, int percent) {
+    const uint64_t scaled = (static_cast<uint64_t>(hp) * static_cast<uint64_t>(std::max(percent, 1)) + 50) / 100;
+    return static_cast<uint32_t>(std::clamp<uint64_t>(scaled, 1, 0x3FFF));
+}
+
 // Text speed (gameplay.text_speed): normal, fast, instant.
 enum class TextSpeed { Normal, Fast, Instant };
 constexpr int kFastTextChars = 3;  // characters a window prints per frame at "fast"

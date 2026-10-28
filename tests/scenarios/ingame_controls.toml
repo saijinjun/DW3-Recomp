@@ -109,13 +109,13 @@ ram = [
 ]
 screenshot = true
 
-# Six more rows down is the Cross binding: "Cross: Z/A" (the slash is the symbol pair 1, 0x0F).
+# Nine more rows down (past Prompts, Vibration, Touch Size, Touch Opacity, Up, Down, Left, Right) is the Cross binding: "Cross: Z/A" (the slash is the symbol pair 1, 0x0F).
 [[wait]]
 at = 1810
 label = "cursor on the Cross binding"
 press = "DOWN"
 every = 40
-ram = [{ addr = 0x800AB75C, size = 4, value = 38 }]
+ram = [{ addr = 0x800AB75C, size = 4, value = 41 }]
 timeout = 600
 
 [[check]]

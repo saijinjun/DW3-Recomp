@@ -34,6 +34,7 @@ constexpr std::string_view kSpeeds[] = {"2x", "4x", "unlimited"};
 constexpr std::string_view kEncounters[] = {"normal", "half", "off", "double"};
 constexpr std::string_view kGameSpeeds[] = {"1x", "2x", "3x", "4x"};
 constexpr std::string_view kXpMultipliers[] = {"1x", "2x", "3x", "5x", "10x"};
+constexpr std::string_view kDifficulties[] = {"normal", "easy", "hard"};
 constexpr std::string_view kTextSpeeds[] = {"normal", "fast", "instant"};
 constexpr std::string_view kPads[] = {"auto", "1", "2", "3", "4"};
 constexpr std::string_view kPrompts[] = {"auto", "xbox", "playstation", "nintendo"};
@@ -200,6 +201,8 @@ const SettingInfo kSettings[] = {
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kXpMultipliers, false, DW3_FIELD(gameplay.xp_multiplier)},
     {"gameplay.bits_multiplier", "Bits multiplier", "Multiplies the bits (money) a won battle pays.",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kXpMultipliers, false, DW3_FIELD(gameplay.bits_multiplier)},
+    {"gameplay.difficulty", "Difficulty", "Enemies' HP in battle: normal as the original, easy (60%) or hard (160%).",
+     Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kDifficulties, false, DW3_FIELD(gameplay.difficulty)},
     {"gameplay.text_speed", "Text speed", "How fast message boxes print their text: normal, fast, or the whole box at once (a button still closes it).",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kTextSpeeds, false, DW3_FIELD(gameplay.text_speed)},
     {"gameplay.auto_battle", "Auto-battle", "Battles fight themselves: every turn the party picks Fight and attacks, and the results screens are passed. Pressing any button for a moment hands a turn back to you.",
