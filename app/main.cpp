@@ -98,6 +98,7 @@
 #include "dw3/recomp.h"
 #include "dw3/host.h"
 #include "dw3/platform.h"
+#include "dw3/sio.h"
 #include "host_input.h"
 #include "ingame/field_menu.h"
 #include "ingame/audio_groups.h"
@@ -484,10 +485,15 @@ int main(int argc, char** argv) {
     // The field is pre-rendered art and sprites: a high 3D scale buys nothing there and costs a lot of GPU memory and
     // bandwidth, so while a field runs the internal resolution is limited to what its HD images and filter can use.
     bool in_field = false;
+    // Battles (and their results screens) may run faster than the rest of the game: gameplay.battle_speed.
+    bool in_battle = false;
+    auto speed_choice = [&](const dw3app::Settings& st) {
+        return std::max(st.gameplay.game_speed, in_battle ? st.gameplay.battle_speed : 0);
+    };
     auto present_options = [&](const dw3app::Settings& st) {
         dw3app::PresentOptions po;
         const auto& g = st.graphics;
-        po.vsync = unpaced || fast_forward.active() || st.gameplay.game_speed != 0 ? dw3app::VsyncMode::Off
+        po.vsync = unpaced || fast_forward.active() || speed_choice(st) != 0 ? dw3app::VsyncMode::Off
                                                                                        : static_cast<dw3app::VsyncMode>(g.vsync);
         po.linear = g.output_filter >= 1;
         po.post = dw3app::post_fx_from(g);
@@ -560,7 +566,7 @@ int main(int argc, char** argv) {
     dw3app::AudioOutput audio;
     audio.open(opt.uncapped || (opt.max_frames >= 0 && !opt.audio), active.audio.mute, active.audio.device,
                active.audio.volume);
-    audio.set_speed(dw3app::game_speed_multiplier(active.gameplay.game_speed));
+    audio.set_speed(dw3app::game_speed_multiplier(speed_choice(active)));
 
     // Live changes of settings: one function applies whatever changed.
     struct LiveSink final : dw3app::SettingsSink {
@@ -579,8 +585,8 @@ int main(int argc, char** argv) {
             const std::string_view id = info->id;
             if (id == "graphics.display_mode" || id == "graphics.monitor" || id.starts_with("graphics.window_") ||
                 id.starts_with("graphics.fullscreen_")) display = true;
-            else if (id == "gameplay.game_speed") {
-                audio.set_speed(dw3app::game_speed_multiplier(now.gameplay.game_speed));
+            else if (id == "gameplay.game_speed" || id == "gameplay.battle_speed") {
+                audio.set_speed(dw3app::game_speed_multiplier(speed_choice(now)));
                 graphics = true;  // vsync is off while the game runs faster than the display
             }
             else if (id == "audio.mute") audio.set_muted(now.audio.mute);
@@ -760,6 +766,11 @@ int main(int argc, char** argv) {
                               ? (mult > 0 ? "Fast-forward on (" + std::to_string(static_cast<int>(mult)) + "x)" : std::string("Fast-forward on (unlimited)"))
                               : std::string("Fast-forward off"));
     };
+    [[maybe_unused]] auto toggle_auto_battle = [&] {  // the touch controls' AUTO button
+        const bool on = !settings.active().gameplay.auto_battle;
+        settings.set("gameplay.auto_battle", on ? "true" : "false");
+        presenter->notify(on ? "Auto-battle on" : "Auto-battle off");
+    };
     auto cycle_game_speed = [&] {
         const int next = (settings.active().gameplay.game_speed + 1) % 4;
         const std::string value = std::to_string(next + 1) + "x";
@@ -776,6 +787,7 @@ int main(int argc, char** argv) {
     bool pacer_started = false, fast_forwarding = false, display_changed = false, fps_shown = false;
     uint64_t fps_window_start = SDL_GetTicksNS();
     uint64_t last_shown_ns = 0;  // when a frame was last presented
+    uint64_t auto_battle_resume = 0;  // auto-battle waits until this frame after the player pressed a button
     int fps_frames = 0;
     constexpr uint64_t kFpsWindowNs = 500'000'000;
     dw3app::FrameStats frame_stats;
@@ -883,9 +895,11 @@ int main(int argc, char** argv) {
                 case dw3app::TouchAction::FastForward: toggle_fast_forward_latch(); break;
                 case dw3app::TouchAction::SaveState: save_slot(); break;
                 case dw3app::TouchAction::LoadState: load_slot(); break;
+                case dw3app::TouchAction::AutoBattle: toggle_auto_battle(); break;
             }
         }
         touch.set_fast_forward(fast_forward.latched());
+        touch.set_auto_battle(settings.active().gameplay.auto_battle);
 #endif
         fast_forward.set_held(host_input.fast_forward_held());
         if (g_quit_requested) dw3::host::Host::stop();
@@ -898,19 +912,36 @@ int main(int argc, char** argv) {
             in_field = game_mode == 2;
             presenter->update_options(present_options(settings.active()), machine.gpu());
         }
+        // Auto-battle taps CROSS in battles and their results: it picks Fight, the first target and the attack each turn,
+        // and passes the results screens. Any button of the player's pauses it for two seconds, to take a turn by hand.
+        {
+            host_input.auto_buttons = 0;
+            if (settings.active().gameplay.auto_battle && in_battle) {
+                if (host_input.buttons(0) != 0) auto_battle_resume = frame + 120;
+                if (frame >= auto_battle_resume && frame % 12 < 3) host_input.auto_buttons = dw3::kPadCross;
+            }
+        }
+        if (const bool battle = game_mode == 6 || game_mode == 0x14; battle != in_battle) {
+            const int before = speed_choice(settings.active());
+            in_battle = battle;
+            if (speed_choice(settings.active()) != before) {
+                audio.set_speed(dw3app::game_speed_multiplier(speed_choice(settings.active())));
+                presenter->update_options(present_options(settings.active()), machine.gpu());
+            }
+        }
         presenter->set_wide_mode(settings.active().graphics.widescreen != 0 ? dw3::wide_mode_for_game_mode(game_mode)
                                                                             : dw3::WideMode::Off);
         const auto& shown = settings.active().graphics;
         // Frame pacing "even" repeats presents only while the measured gap between back-to-back presents says the
         // display really runs at a multiple of 60 Hz; the reported refresh rate is just the hint to try.
         present_cadence.set_enabled(shown.frame_pacing == 1 && shown.vsync != 0 && !unpaced && !fast_forward.active() &&
-                                    settings.active().gameplay.game_speed == 0);
+                                    speed_choice(settings.active()) == 0);
         present_cadence.set_reported_hz(refresh_hz);
         const int planned = present_cadence.plan_frame();
         const uint64_t present_began_ns = SDL_GetTicksNS();
         // Faster than real time the frames come quicker than the display shows them, so only one per refresh is
         // presented. Where vsync cannot be turned off (most phones) every present would wait for one and cap the speed.
-        const bool sped_up = fast_forward.active() || settings.active().gameplay.game_speed != 0;
+        const bool sped_up = fast_forward.active() || speed_choice(settings.active()) != 0;
         const uint64_t refresh_ns = static_cast<uint64_t>(1e9 / (refresh_hz > 0.0 ? refresh_hz : 60.0));
         const bool skip_present = sped_up && !want_shot && !unpaced && present_began_ns - last_shown_ns < refresh_ns * 9 / 10;
         const int presents = skip_present ? 0 : planned;
@@ -965,7 +996,7 @@ int main(int argc, char** argv) {
                 pacing_reset = false;
             }
             pacer.set_speed(ff ? dw3app::fast_forward_multiplier(settings.active().system.fast_forward_speed)
-                                : dw3app::game_speed_multiplier(settings.active().gameplay.game_speed),
+                                : dw3app::game_speed_multiplier(speed_choice(settings.active())),
                             now,
                             machine.ctx().cycles);
             if (opt.uncapped) return;

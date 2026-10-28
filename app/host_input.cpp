@@ -83,7 +83,7 @@ uint16_t HostInput::buttons(int port) {
     if (gamepad_ && controls.left_stick)
         mask |= stick_dpad_bits(SDL_GetGamepadAxis(gamepad_, SDL_GAMEPAD_AXIS_LEFTX),
                                 SDL_GetGamepadAxis(gamepad_, SDL_GAMEPAD_AXIS_LEFTY), controls.deadzone);
-    mask |= touch_buttons;
+    mask |= touch_buttons | auto_buttons;
     if (script)
         for (const Press& p : *script)
             if (frame >= p.from && frame < p.to) mask |= p.button;

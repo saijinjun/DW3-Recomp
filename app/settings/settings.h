@@ -87,6 +87,8 @@ struct Settings {
         bool god_mode = false;       // the party takes no damage and defeats enemies in one hit
         int xp_multiplier = 0;       // choice: 1x, 2x, 3x, 5x, 10x (experience from won battles)
         int text_speed = 0;          // choice: normal, fast, instant (how quickly message windows print)
+        bool auto_battle = false;    // battles fight themselves: the party attacks the first enemy every turn
+        int battle_speed = 0;        // choice: 1x, 2x, 3x, 4x (the game speed while a battle or its results run)
         bool operator==(const Gameplay&) const = default;
     } gameplay;
 

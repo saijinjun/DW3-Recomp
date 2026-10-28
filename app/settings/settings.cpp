@@ -192,6 +192,10 @@ const SettingInfo kSettings[] = {
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kXpMultipliers, false, DW3_FIELD(gameplay.xp_multiplier)},
     {"gameplay.text_speed", "Text speed", "How fast message boxes print their text: normal, fast, or the whole box at once (a button still closes it).",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kTextSpeeds, false, DW3_FIELD(gameplay.text_speed)},
+    {"gameplay.auto_battle", "Auto-battle", "Battles fight themselves: every turn the party picks Fight and attacks, and the results screens are passed. Pressing any button for a moment hands a turn back to you.",
+     Group::Gameplay, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(gameplay.auto_battle)},
+    {"gameplay.battle_speed", "Battle speed", "Runs battles and their results faster than the rest of the game (the higher of this and the game speed applies).",
+     Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kGameSpeeds, false, DW3_FIELD(gameplay.battle_speed)},
 };
 
 #undef DW3_FIELD
