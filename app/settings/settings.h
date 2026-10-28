@@ -69,6 +69,7 @@ struct Settings {
         bool left_stick = true;      // the left stick moves like the D-pad
         int deadzone = 25;           // percent of stick travel that does nothing
         int prompts = 0;             // choice: auto, xbox, playstation, nintendo (names of gamepad buttons in hints)
+        bool touch_vibration = true; // phones: a short vibration for each press of an on-screen button
         std::array<std::string, input::kActionCount> bindings = input::default_binding_texts();  // "Z|South" per action
         bool operator==(const Controls&) const = default;
     } controls;
@@ -78,6 +79,7 @@ struct Settings {
         std::string memcard2;        // empty selects <user data dir>/memcards/slot2.mcd
         std::string disc_path;       // the disc image chosen in the first-run setup; empty if none yet
         int fast_forward_speed = 1;  // choice: 2x, 4x, unlimited
+        bool resume = false;         // keep a save state of the running game every minute and offer it at the next start
         bool operator==(const System&) const = default;
     } system;
 

@@ -98,7 +98,7 @@
 #include "dw3/recomp.h"
 #include "dw3/host.h"
 #include "dw3/platform.h"
-#include "dw3/sio.h"
+#include "auto_battle.h"
 #include "host_input.h"
 #include "ingame/field_menu.h"
 #include "ingame/audio_groups.h"
@@ -313,7 +313,8 @@ int main(int argc, char** argv) {
                                             {"gameplay.encounters", "half"},
                                             {"gameplay.xp_multiplier", "2x"},
                                             {"gameplay.text_speed", "fast"},
-                                            {"system.fast_forward_speed", "4x"}})
+                                            {"system.fast_forward_speed", "4x"},
+                                            {"system.resume", "true"}})
                 if (!dw3app::set_text(stored, *dw3app::find_setting(id), value, err)) SDL_Log("settings: %s", err.c_str());
 #endif
             if (dw3app::save_settings_file(config_file, stored, err)) SDL_Log("created %s", dw3::platform::path_to_utf8(config_file).c_str());
@@ -543,6 +544,22 @@ int main(int argc, char** argv) {
     // On-screen controls; they hide while a gamepad is used and come back when the screen is touched.
     dw3app::TouchControls touch;
     presenter->set_touch_controls(&touch);
+    // The phone's own vibrator, which SDL lists as a haptic device.
+    SDL_Haptic* vibrator = nullptr;
+    if (SDL_InitSubSystem(SDL_INIT_HAPTIC)) {
+        int count = 0;
+        if (SDL_HapticID* ids = SDL_GetHaptics(&count)) {
+            for (int i = 0; i < count && !vibrator; ++i) {
+                vibrator = SDL_OpenHaptic(ids[i]);
+                if (vibrator && !SDL_InitHapticRumble(vibrator)) {
+                    SDL_CloseHaptic(vibrator);
+                    vibrator = nullptr;
+                }
+            }
+            SDL_free(ids);
+        }
+    }
+    uint32_t touch_presses = 0;
 #endif
     const bool software_presenter = std::string(presenter->name()).find("software") != std::string::npos;
     if (software_presenter && (active.graphics.hd_backgrounds || active.graphics.seamless_bg || !opt.dump_textures.empty()))
@@ -629,8 +646,26 @@ int main(int argc, char** argv) {
         presenter->notify("Loaded " + dw3::platform::path_to_utf8(dw3::platform::path_from_utf8(opt.load_state).filename()));
     }
 
+    // The game the last run left off at (system.resume), if the player wants it back.
+    const std::filesystem::path resume_path = dw3::platform::user_data_dir() / "states" / "resume.state";
+    if (opt.load_state.empty() && opt.max_frames < 0 && active.system.resume && std::filesystem::exists(resume_path)) {
+        const SDL_MessageBoxButtonData buttons[] = {{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Continue"},
+                                                    {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Start normally"}};
+        const SDL_MessageBoxData box{SDL_MESSAGEBOX_INFORMATION, window, "Digimon World 3",
+                                     "Continue where you left off last time?", 2, buttons, nullptr};
+        int choice = 0;
+        std::vector<uint8_t> data;
+        if (SDL_ShowMessageBox(&box, &choice) && choice == 1 && read_state_file(dw3::platform::path_to_utf8(resume_path), data)) {
+            host->load_state(std::move(data), [&](const std::string& e) {
+                if (e.empty()) presenter->notify("Continued where you left off");
+                else SDL_Log("cannot load the resume state: %s", e.c_str());
+            });
+        }
+    }
+
     host_input.script = &opt.presses;
-    machine.sio().set_pad_source(0, &host_input);
+    dw3app::ingame::AutoBattlePad pad(host_input, machine, settings);
+    machine.sio().set_pad_source(0, &pad);
     std::size_t funcs = 0;
     for (const auto& segment : host->segments()) funcs += segment.func_count;
     SDL_Log("recompiled code: %zu segments, %zu functions", host->segments().size(), funcs);
@@ -690,6 +725,23 @@ int main(int argc, char** argv) {
         std::array<int, 10> in_flight{};  // saves not yet on disk, per slot
     };
     static SaveResults saves;
+    // system.resume: the running game is saved to resume_path every minute of play and when the app is sent away.
+    static std::atomic<bool> resume_saving{false};
+    uint64_t next_resume_save = 3600;
+    auto save_resume = [&] {
+        if (!settings.active().system.resume || resume_saving.exchange(true)) return;
+        const std::string path = dw3::platform::path_to_utf8(resume_path);
+        host->save_state_async([path](std::vector<uint8_t> file, const std::string& err) {
+            std::string werr;
+            if (!err.empty() || !dw3::savestate::write_file(path + ".part", file, werr)) {
+                SDL_Log("cannot keep the resume state: %s", (err.empty() ? werr : err).c_str());
+            } else {
+                std::error_code ec;
+                std::filesystem::rename(dw3::platform::path_from_utf8(path + ".part"), dw3::platform::path_from_utf8(path), ec);
+            }
+            resume_saving = false;
+        });
+    };
     auto save_slot = [&] {
         const std::string path = slot_path();
         const int slot = state_slot;
@@ -787,7 +839,6 @@ int main(int argc, char** argv) {
     bool pacer_started = false, fast_forwarding = false, display_changed = false, fps_shown = false;
     uint64_t fps_window_start = SDL_GetTicksNS();
     uint64_t last_shown_ns = 0;  // when a frame was last presented
-    uint64_t auto_battle_resume = 0;  // auto-battle waits until this frame after the player pressed a button
     int fps_frames = 0;
     constexpr uint64_t kFpsWindowNs = 500'000'000;
     dw3app::FrameStats frame_stats;
@@ -860,6 +911,7 @@ int main(int argc, char** argv) {
                 touch.set_visible(false);
             } else if (e.type == SDL_EVENT_WILL_ENTER_BACKGROUND) {
                 touch.release_all();
+                save_resume();
             } else if (e.type == SDL_EVENT_DID_ENTER_FOREGROUND) {
                 // The app was away: the window has a new surface, and real time moved on without the game.
                 presenter->surface_changed();
@@ -900,6 +952,10 @@ int main(int argc, char** argv) {
         }
         touch.set_fast_forward(fast_forward.latched());
         touch.set_auto_battle(settings.active().gameplay.auto_battle);
+        if (touch.presses() != touch_presses) {
+            touch_presses = touch.presses();
+            if (vibrator && settings.active().controls.touch_vibration) SDL_PlayHapticRumble(vibrator, 0.35f, 12);
+        }
 #endif
         fast_forward.set_held(host_input.fast_forward_held());
         if (g_quit_requested) dw3::host::Host::stop();
@@ -911,15 +967,6 @@ int main(int argc, char** argv) {
         if ((game_mode == 2) != in_field) {
             in_field = game_mode == 2;
             presenter->update_options(present_options(settings.active()), machine.gpu());
-        }
-        // Auto-battle taps CROSS in battles and their results: it picks Fight, the first target and the attack each turn,
-        // and passes the results screens. Any button of the player's pauses it for two seconds, to take a turn by hand.
-        {
-            host_input.auto_buttons = 0;
-            if (settings.active().gameplay.auto_battle && in_battle) {
-                if (host_input.buttons(0) != 0) auto_battle_resume = frame + 120;
-                if (frame >= auto_battle_resume && frame % 12 < 3) host_input.auto_buttons = dw3::kPadCross;
-            }
         }
         if (const bool battle = game_mode == 6 || game_mode == 0x14; battle != in_battle) {
             const int before = speed_choice(settings.active());
@@ -960,6 +1007,10 @@ int main(int argc, char** argv) {
         if (present_cadence.end_frame(pacer_started && !pacing_reset ? pacer.lag_ns(SDL_GetTicksNS(), machine.ctx().cycles) : 0))
             pacing_reset = true;
         ++fps_frames;
+        if (frame >= next_resume_save) {
+            save_resume();
+            next_resume_save = frame + 3600;
+        }
         if (const uint64_t now = SDL_GetTicksNS(); now - fps_window_start >= kFpsWindowNs) {
             if (shown.show_fps) {
                 const double fps = static_cast<double>(fps_frames) * 1e9 / static_cast<double>(now - fps_window_start);

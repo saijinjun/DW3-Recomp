@@ -63,11 +63,13 @@ everything else applies immediately.
 | `controls.left_stick` | bool | |
 | `controls.deadzone` | 10 to 50 (percent) | |
 | `controls.prompts` | `auto`, `xbox`, `playstation`, `nintendo` | |
+| `controls.touch_vibration` | bool | |
 | `controls.<action>` | binding text, see Controls | |
 | `system.memcards` (restart) | bool | `--no-memcard` |
 | `system.memcard1`, `system.memcard2` (restart) | paths, empty for the defaults | `--memcard1`, `--memcard2` |
 | `system.disc_path` (restart) | path of the disc image (`.cue`); written by the first-run setup, not listed in the in-game screen | `--disc` |
 | `system.fast_forward_speed` | `2x`, `4x`, `unlimited` | `--fast-forward-speed` |
+| `system.resume` | bool | |
 | `gameplay.encounters` | `normal`, `half`, `off`, `double` | `--encounters` |
 | `gameplay.game_speed` | `1x`, `2x`, `3x`, `4x` | `--game-speed` |
 | `gameplay.god_mode` | bool | `--god-mode` |

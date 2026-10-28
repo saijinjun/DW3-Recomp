@@ -130,6 +130,8 @@ const SettingInfo kSettings[] = {
      Group::Controls, Type::Int, Apply::Live, 10, 50, {}, false, DW3_FIELD(controls.deadzone)},
     {"controls.prompts", "Button prompts", "Names of gamepad buttons in on-screen hints: auto follows the connected pad.",
      Group::Controls, Type::Choice, Apply::Live, 0, 0, kPrompts, false, DW3_FIELD(controls.prompts)},
+    {"controls.touch_vibration", "Touch vibration", "Phones: a short vibration for each press of an on-screen button.",
+     Group::Controls, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(controls.touch_vibration)},
     {"controls.up", "Up binding", "Keyboard key and gamepad button for Up, written as key|button (for example Z|South). Reserved keys cannot be moved.",
      Group::Controls, Type::String, Apply::Live, 0, 0, {}, true, DW3_FIELD(controls.bindings[0])},
     {"controls.down", "Down binding", "Keyboard key and gamepad button for Down, written as key|button (for example Z|South). Reserved keys cannot be moved.",
@@ -181,6 +183,8 @@ const SettingInfo kSettings[] = {
      Group::System, Type::String, Apply::Restart, 0, 0, {}, true, DW3_FIELD(system.disc_path)},
     {"system.fast_forward_speed", "Fast-forward speed", "Speed while fast-forwarding (hold Tab, or press F10 to latch it).",
      Group::System, Type::Choice, Apply::Live, 0, 0, kSpeeds, false, DW3_FIELD(system.fast_forward_speed)},
+    {"system.resume", "Resume where you left off", "Keeps a save state of the running game, updated every minute and when the app goes to the background, and offers to continue from it at the next start (phones close games in the background).",
+     Group::System, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(system.resume)},
 
     {"gameplay.encounters", "Random encounters", "How often random battles start while walking: normal, half as often, never, or twice as often.",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kEncounters, false, DW3_FIELD(gameplay.encounters)},

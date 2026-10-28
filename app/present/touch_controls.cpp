@@ -188,6 +188,7 @@ void TouchControls::finger_down(uint64_t finger, float x, float y, int window_w,
     if (!visible_) set_visible(true);
     const int c = hit(x, y, true);
     fingers_[finger] = {c, x, y};
+    if (c >= 0) ++presses_;
     if (c >= 0 && controls_[static_cast<std::size_t>(c)].action >= 0)
         actions_.push_back(static_cast<TouchAction>(controls_[static_cast<std::size_t>(c)].action));
 }

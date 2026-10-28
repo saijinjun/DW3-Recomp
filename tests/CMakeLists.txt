@@ -146,7 +146,7 @@ dw3_add_test(test_input
 
 # The settings list of the in-game screen and its text encoding.
 dw3_add_test(test_ingame
-    SOURCES app/test_ingame.cpp app/test_ingame_controls.cpp
+    SOURCES app/test_ingame.cpp app/test_ingame_controls.cpp app/test_auto_battle.cpp
     LIBS dw3ingame)
 
 # First-run wizard logic: state machine, disc identification, hashes, download plan, unpacking and the install sequence.

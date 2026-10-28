@@ -35,7 +35,6 @@ public:
     const std::vector<Press>* script = nullptr;  // scripted presses by frame
     int64_t frame = 0;
     uint16_t touch_buttons = 0;                  // console buttons held on the on-screen touch controls
-    uint16_t auto_buttons = 0;                   // console buttons the app presses itself (auto-battle)
 
     // Console pad (port 1).
     bool connected(int port) override { return port == 0; }

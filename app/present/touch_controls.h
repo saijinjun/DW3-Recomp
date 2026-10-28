@@ -35,6 +35,8 @@ public:
     // Shows the fast-forward and auto-battle buttons lit.
     void set_fast_forward(bool on);
     void set_auto_battle(bool on);
+    // Counts fingers that landed on a control (for a short vibration per press).
+    uint32_t presses() const { return presses_; }
 
     // The controls drawn for a window of this size (nothing visible is transparent), at 1/`downscale` of the window's
     // resolution. `serial` changes whenever the pixels do, so callers upload the image only then.
@@ -66,6 +68,7 @@ private:
     bool visible_ = true;
     bool fast_forward_ = false;
     bool auto_battle_ = false;
+    uint32_t presses_ = 0;
     int w_ = 0, h_ = 0;
     std::vector<Control> controls_;
     std::map<uint64_t, Finger> fingers_;
