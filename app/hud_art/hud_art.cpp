@@ -5,6 +5,9 @@
 #include <cstddef>
 #include <initializer_list>
 
+#include "battle_card_data.h"
+#include "battle_enemy_data.h"
+
 #include "hud_coin_data.h"
 #include "hud_frame_data.h"
 #include "minimap_frame_data.h"
@@ -22,6 +25,8 @@ static_assert(dw3::hud_art::touch_dpad_size == 256 * 256 * 4, "touch_dpad.rgba m
 static_assert(dw3::hud_art::touch_face_size == 128 * 128 * 4, "touch_face.rgba must be 128x128 RGBA");
 static_assert(dw3::hud_art::touch_shoulder_l_size == 256 * 96 * 4, "touch_shoulder_l.rgba must be 256x96 RGBA");
 static_assert(dw3::hud_art::touch_shoulder_r_size == 256 * 96 * 4, "touch_shoulder_r.rgba must be 256x96 RGBA");
+static_assert(dw3::hud_art::battle_card_size == 512 * 102 * 4, "battle_card.rgba must be 512x102 RGBA");
+static_assert(dw3::hud_art::battle_enemy_size == 512 * 66 * 4, "battle_enemy.rgba must be 512x66 RGBA");
 static_assert(dw3::hud_art::minimap_frame_size == 343 * 318 * 4, "minimap_frame.rgba must be 343x318 RGBA");
 static_assert(dw3::hud_art::touch_pill_size == 192 * 64 * 4, "touch_pill.rgba must be 192x64 RGBA");
 
@@ -35,6 +40,8 @@ DW3_PICTURE(face, touch_face, 128, 128)
 DW3_PICTURE(shoulder_l, touch_shoulder_l, 256, 96)
 DW3_PICTURE(shoulder_r, touch_shoulder_r, 256, 96)
 DW3_PICTURE(pill, touch_pill, 192, 64)
+DW3_PICTURE(battle_card, battle_card, 512, 102)
+DW3_PICTURE(battle_enemy, battle_enemy, 512, 66)
 DW3_PICTURE(minimap_frame, minimap_frame, 343, 318)
 #undef DW3_PICTURE
 

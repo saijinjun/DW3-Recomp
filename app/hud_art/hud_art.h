@@ -17,6 +17,8 @@ Picture face();        // a face button, blank (the symbol is drawn over it)
 Picture shoulder_l();  // L1/L2, slanted to the left
 Picture shoulder_r();  // R1/R2
 Picture pill();        // the other buttons (SELECT, START, the app's own); its round ends are pill.h / 2 wide
+Picture battle_card();   // the battle HUD's card for a party Digimon: a ring on the left, a dark panel to the right
+Picture battle_enemy();  // an enemy's bar: a red frame with a ring on the left and an open channel for the HP
 Picture minimap_frame();  // the minimap's frame, compass at the top right; see kMinimapFrame* for its opening
 
 // The minimap frame's corners (kept whole when the frame is stretched) and how far in its opening starts on each

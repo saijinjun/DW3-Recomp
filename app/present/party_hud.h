@@ -38,6 +38,8 @@ std::string decode_game_name(const uint8_t* bytes, std::size_t size);
 // Reads the party from RAM through `read32` (an aligned 32-bit read). Members with an index or stats out of range are
 // left out.
 PartyState read_party(const std::function<uint32_t(uint32_t)>& read32);
+// The name of the Digimon in party slot `slot` (0..2), empty when the slot holds none.
+std::string read_party_name(const std::function<uint32_t(uint32_t)>& read32, int slot);
 
 class PartyHud {
 public:

@@ -1,8 +1,9 @@
-# Art for the overlays (party HUD, touch controls, minimap): raw RGBA images cut from the owner's HUD asset sheet and embedded in the executable.
+# Art for the overlays (party and battle HUDs, touch controls, minimap): raw RGBA images cut from the owner's HUD asset sheet and embedded in the executable.
 # hud_frame.rgba is 480x205, hud_coin.rgba 64x64, touch_dpad.rgba 256x256, touch_face.rgba 128x128, touch_shoulder_l.rgba and
-# touch_shoulder_r.rgba 256x96, touch_pill.rgba 192x64, minimap_frame.rgba 343x318 (straight alpha, red in the first byte).
+# touch_shoulder_r.rgba 256x96, touch_pill.rgba 192x64, minimap_frame.rgba 343x318,
+# battle_card.rgba 512x102, battle_enemy.rgba 512x66 (straight alpha, red in the first byte).
 set(DW3_HUD_ART_HEADERS)
-foreach(art hud_frame hud_coin touch_dpad touch_face touch_shoulder_l touch_shoulder_r touch_pill minimap_frame)
+foreach(art hud_frame hud_coin touch_dpad touch_face touch_shoulder_l touch_shoulder_r touch_pill minimap_frame battle_card battle_enemy)
     set(header ${CMAKE_CURRENT_BINARY_DIR}/${art}_data.h)
     add_custom_command(
         OUTPUT ${header}

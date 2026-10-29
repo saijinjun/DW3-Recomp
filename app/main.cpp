@@ -107,6 +107,7 @@
 #include "ingame/gameplay.h"
 #include "frame_stats.h"
 #include "present/minimap.h"
+#include "present/battle_hud.h"
 #include "present/party_hud.h"
 #include "present/monitors.h"
 #include "present/native_window.h"
@@ -594,6 +595,8 @@ int main(int argc, char** argv) {
     bool minimap_large = false;
     // The party HUD (gameplay.party_hud).
     dw3app::PartyHud party_hud;
+    // The battle HUD (gameplay.battle_hud).
+    dw3app::BattleHud battle_hud;
 #if defined(DW3_ANDROID)
     // On-screen controls; they hide while a gamepad is used and come back when the screen is touched.
     dw3app::TouchControls touch;
@@ -1089,9 +1092,24 @@ int main(int argc, char** argv) {
                 const dw3app::OsdImage* image = party_hud.frame(party, u * 34 / 100);
                 presenter->set_panel(1, image, image ? ww - u * 5 / 100 - image->w : 0, u * 30 / 100, party_hud.serial());
             }
+        } else if (settings.active().gameplay.battle_hud && game_mode == 6) {
+            // The battle HUD: the party's cards on the right and the enemies' bars on the left, in the space beside
+            // the 4:3 picture where there is room (between the shoulder buttons and the d-pad or face buttons).
+            if (frame % 3 == 0) {
+                int ww = 0, wh = 0;
+                SDL_GetWindowSizeInPixels(window, &ww, &wh);
+                const int u = std::min(ww, wh), margin = (ww - wh * 4 / 3) / 2;
+                const int width = std::clamp(margin - u * 6 / 100, u * 30 / 100, u * 38 / 100);
+                const dw3app::BattleState battle = dw3app::read_battle([&](uint32_t addr) { return dw3_read32(&machine.ctx(), addr); });
+                const dw3app::OsdImage* cards = battle_hud.party(battle, width);
+                presenter->set_panel(1, cards, cards ? ww - u * 4 / 100 - cards->w : 0, u * 27 / 100, battle_hud.party_serial());
+                const dw3app::OsdImage* bars = battle_hud.enemies(battle, width);
+                presenter->set_panel(2, bars, u * 4 / 100, u * 27 / 100, battle_hud.enemies_serial());
+            }
         } else {
             presenter->set_panel(1, nullptr, 0, 0, 0);
         }
+        if (!(settings.active().gameplay.battle_hud && game_mode == 6)) presenter->set_panel(2, nullptr, 0, 0, 0);
         const auto& shown = settings.active().graphics;
         // Frame pacing "even" repeats presents only while the measured gap between back-to-back presents says the
         // display really runs at a multiple of 60 Hz; the reported refresh rate is just the hint to try.

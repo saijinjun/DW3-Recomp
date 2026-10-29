@@ -80,10 +80,10 @@ public:
     void set_status(std::string text);
     // On-screen touch controls to draw under the notifications (null: none). Not part of captures.
     void set_touch_controls(TouchControls* touch) { touch_ = touch; }
-    // Pictures kept on screen at window position (x, y), such as the minimap (slot 0) and the party HUD (slot 1); null
+    // Pictures kept on screen at window position (x, y), such as the minimap (slot 0), the party HUD or the battle party cards (slot 1) and the enemy bars (slot 2); null
     // removes one. `serial` changes whenever its pixels do. The image must stay valid until it is replaced. Not part
     // of captures.
-    static constexpr int kPanelSlots = 2;
+    static constexpr int kPanelSlots = 3;
     void set_panel(int slot, const OsdImage* image, int x, int y, uint64_t serial);
 
 protected:

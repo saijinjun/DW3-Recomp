@@ -81,6 +81,7 @@ everything else applies immediately.
 | `gameplay.heal_after_battle` | bool | |
 | `gameplay.minimap` | bool | |
 | `gameplay.party_hud` | bool (default on) | |
+| `gameplay.battle_hud` | bool (default on) | |
 | `gameplay.text_speed` | `normal`, `fast`, `instant` | `--text-speed` |
 | `gameplay.auto_battle` | bool | |
 | `gameplay.battle_speed` | `1x`, `2x`, `3x`, `4x` | |

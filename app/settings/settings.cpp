@@ -211,6 +211,8 @@ const SettingInfo kSettings[] = {
      Group::Gameplay, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(gameplay.minimap)},
     {"gameplay.party_hud", "Party HUD", "Shows each party Digimon's name, level, HP and MP bars and the bits you carry in a corner while you walk the field.",
      Group::Gameplay, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(gameplay.party_hud)},
+    {"gameplay.battle_hud", "Battle HUD", "In battle, shows a card with each party Digimon's HP and MP beside the picture, and every enemy's HP in figures.",
+     Group::Gameplay, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(gameplay.battle_hud)},
     {"gameplay.text_speed", "Text speed", "How fast message boxes print their text: normal, fast, or the whole box at once (a button still closes it).",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kTextSpeeds, false, DW3_FIELD(gameplay.text_speed)},
     {"gameplay.auto_battle", "Auto-battle", "Battles fight themselves: every turn the party picks Fight and attacks, and the results screens are passed. Pressing any button for a moment hands a turn back to you.",

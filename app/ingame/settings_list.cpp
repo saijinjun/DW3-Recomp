@@ -63,6 +63,7 @@ constexpr Labels kLabels[] = {
     {"gameplay.heal_after_battle", "Auto Heal", 1},
     {"gameplay.minimap", "Minimap", 1},
     {"gameplay.party_hud", "Party HUD", 1},
+    {"gameplay.battle_hud", "Battle HUD", 1},
     {"gameplay.text_speed", "Text Speed", 1},
     {"gameplay.auto_battle", "Auto Battle", 1},
     {"gameplay.battle_speed", "Battle Speed", 1},
