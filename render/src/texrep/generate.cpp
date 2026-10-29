@@ -101,6 +101,16 @@ bool generate_pack(const std::vector<std::filesystem::path>& dump_dirs, const st
                 continue;
             }
             have.insert({t.block, t.clut});
+            // Finished by an earlier run that was stopped before it wrote the manifest: keep the image.
+            PackEntry done{t.block, t.clut, t.width, t.height, "tex/" + hash_to_hex(t.block) + "_" + hash_to_hex(t.clut) + ".png"};
+            Image existing;
+            std::string ignored;
+            if (std::filesystem::exists(out_dir / done.file) && read_png(out_dir / done.file, existing, ignored) &&
+                existing.w == t.width * options.scale && existing.h == t.height * options.scale) {
+                manifest.entries.push_back(std::move(done));
+                ++report.skipped_existing;
+                continue;
+            }
             items.push_back({t, dir, component_index[t.component]});
         }
     }
@@ -120,6 +130,19 @@ bool generate_pack(const std::vector<std::filesystem::path>& dump_dirs, const st
             for (const DumpPiece& p : t.pieces) jobs.push_back({i, p});
         jobs_left[i] = std::max<std::size_t>(t.pieces.size(), 1);
     }
+
+    // Written after every batch too, so that a run that is stopped keeps what it finished.
+    auto save_manifest = [&]() {
+        const std::string text = write_pack_manifest(manifest);
+        std::error_code ec;
+        std::filesystem::create_directories(out_dir, ec);
+        std::ofstream out(out_dir / "manifest.toml", std::ios::binary | std::ios::trunc);
+        if (!out || !out.write(text.data(), static_cast<std::streamsize>(text.size()))) {
+            error = "cannot write " + (out_dir / "manifest.toml").string();
+            return false;
+        }
+        return true;
+    };
 
     const int shrink = options.model_scale / options.scale;
     constexpr std::size_t kNone = static_cast<std::size_t>(-1);
@@ -174,18 +197,10 @@ bool generate_pack(const std::vector<std::filesystem::path>& dump_dirs, const st
             manifest.entries.push_back(std::move(e));
             ++report.generated;
         }
+        if (!save_manifest()) return false;
         if (options.progress) options.progress(end, jobs.size());
     }
-
-    const std::string text = write_pack_manifest(manifest);
-    std::error_code ec;
-    std::filesystem::create_directories(out_dir, ec);
-    std::ofstream out(out_dir / "manifest.toml", std::ios::binary | std::ios::trunc);
-    if (!out || !out.write(text.data(), static_cast<std::streamsize>(text.size()))) {
-        error = "cannot write " + (out_dir / "manifest.toml").string();
-        return false;
-    }
-    return true;
+    return save_manifest();
 }
 
 }  // namespace dw3::texrep
