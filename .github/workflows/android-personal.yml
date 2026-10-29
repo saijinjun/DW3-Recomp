@@ -2,7 +2,7 @@ name: Android personal build
 
 on:
   push:
-    branches: [main, android-port]
+    branches: [main, android-port, game-upgrades]
   workflow_dispatch:
 
 concurrency:
@@ -40,6 +40,8 @@ jobs:
           git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/bundle"
           cd "$RUNNER_TEMP/bundle"
           cat disc.bin.zst.part* > disc.bin.zst && rm disc.bin.zst.part*
+          # Optional HD backgrounds made from the same disc (tools/models/realesrgan_cpu.py, texpack generate).
+          if ls hd-pack.zip.part* > /dev/null 2>&1; then cat hd-pack.zip.part* > hd-pack.zip && rm hd-pack.zip.part*; fi
           sha256sum -c SHA256SUMS
           echo "present=true" >> "$GITHUB_OUTPUT"
 

@@ -3,6 +3,7 @@ set(DW3_APP_SOURCES main.cpp
     present/presenter.cpp
     present/osd.cpp
     present/touch_controls.cpp
+    present/minimap.cpp
     present/software_presenter.cpp
     present/hw_presenter.cpp
     present/texture_packs.cpp

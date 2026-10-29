@@ -41,6 +41,7 @@
 #include "dw3/upload_recorder.h"
 #include "field_menu.h"
 #include "audio_groups.h"
+#include "auto_battle.h"
 #include "gameplay.h"
 #include "scenario.h"
 #include "frame_stats.h"
@@ -679,6 +680,8 @@ int main(int argc, char** argv) {
         dw3app::SettingsController settings_controller(scenario_settings, scenario_settings, nullptr, {});
         dw3app::ingame::FieldMenuSettings settings_screen(host->machine(), settings_controller);
         dw3app::ingame::GameplayHooks gameplay(host->machine(), settings_controller);
+        dw3app::ingame::AutoBattlePad auto_pad(pad, host->machine(), settings_controller);
+        host->machine().sio().set_pad_source(0, &auto_pad);
         dw3app::ingame::AudioGroups audio_groups(host->machine(), settings_controller);
         int64_t base = last_frame;  // real frames before this boot; shifted when a state is loaded
         if (boot == 0 && !scenario.start_state.empty()) {
@@ -735,6 +738,7 @@ int main(int argc, char** argv) {
                 stats_before = hw->stats();
             }};
             settings_screen.apply_pending();
+            gameplay.tick();
             if (hw) hw->set_wide_mode(dw3::wide_mode_for_game_mode(read_ram(0x800554D0, 4)));
             last_frame = base + static_cast<int64_t>(frame);
             timeline.advance(last_frame, read_ram);

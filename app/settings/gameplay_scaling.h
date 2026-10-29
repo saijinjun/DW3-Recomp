@@ -21,6 +21,29 @@ inline uint32_t scaled_experience(uint32_t amount, int multiplier) {
     return static_cast<uint32_t>(std::min<uint64_t>(scaled, kMaxExperience));
 }
 
+// Bits (money) multiplier for a gameplay.bits_multiplier choice: the same steps as experience.
+inline int bits_multiplier(int choice) { return xp_multiplier(choice); }
+
+// The largest purse a scaled battle reward fills up to (the screens that show bits print six digits safely).
+constexpr uint32_t kMaxBits = 999999;
+
+// The purse after a battle reward `gained` on top of `before` is multiplied by `multiplier`. It never drops below
+// what the game itself granted and never passes kMaxBits by scaling.
+inline uint32_t scaled_bits(uint32_t before, uint32_t gained, int multiplier) {
+    const uint64_t granted = static_cast<uint64_t>(before) + gained;
+    const uint64_t scaled = static_cast<uint64_t>(before) + static_cast<uint64_t>(gained) * static_cast<uint64_t>(std::max(multiplier, 1));
+    return static_cast<uint32_t>(std::max(granted, std::min<uint64_t>(scaled, kMaxBits)));
+}
+
+// Difficulty (gameplay.difficulty: normal, easy, hard): enemies start a battle with this percentage of their HP.
+inline int enemy_hp_percent(int choice) { return choice == 1 ? 60 : choice == 2 ? 130 : 100; }
+
+// Enemy HP scaled by `percent`, at least 1 and never past what the battle's HP field is kept to (0x3FFF).
+inline uint32_t scaled_enemy_hp(uint32_t hp, int percent) {
+    const uint64_t scaled = (static_cast<uint64_t>(hp) * static_cast<uint64_t>(std::max(percent, 1)) + 50) / 100;
+    return static_cast<uint32_t>(std::clamp<uint64_t>(scaled, 1, 0x3FFF));
+}
+
 // Text speed (gameplay.text_speed): normal, fast, instant.
 enum class TextSpeed { Normal, Fast, Instant };
 constexpr int kFastTextChars = 3;  // characters a window prints per frame at "fast"

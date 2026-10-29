@@ -1,5 +1,7 @@
 #include "gameplay.h"
 
+#include <utility>
+
 #include "dw3/recomp.h"
 #include "gameplay_scaling.h"
 
@@ -17,7 +19,8 @@ constexpr uint32_t kAttackerSide = 80;
 // Combatants: 32-byte records, three per side, the party's first at kRecords and the enemies' 96 bytes after;
 // kActive holds, per side, the index of the member being acted on. The attacker's side is 0 for the party.
 constexpr uint32_t kRecords = 0x800A31F8, kActive = 0x800A31F0;
-constexpr uint32_t kRecordSize = 32, kSideStride = 96, kHp = 8;
+constexpr uint32_t kRecordSize = 32, kSideStride = 96, kHp = 8, kMaxHp = 6, kSideMembers = 3;
+constexpr uint32_t kBattleMode = 6;
 constexpr uint32_t kPartySide = 0, kEnemySide = 1;
 constexpr uint16_t kLift = 0x4000;
 
@@ -41,6 +44,18 @@ constexpr uint32_t kTextWindowTick = 0x8001A890, kMeasureBox = 0x80019C2C;
 constexpr uint32_t kWindowState = 12, kWindowPrinted = 164, kWindowTimer = 168, kWindowDelay = 170;
 constexpr uint32_t kWindowTypewriter = 193, kWindowBoxFull = 195;
 constexpr uint32_t kWindowPrinting = 1;
+
+// The purse, in bits (read by the shops and the status screen). A won battle's bits are added as its results screens
+// end; the multiplier scales a rise that comes from the start of the results up to kBitsWindow frames after them.
+constexpr uint32_t kBits = 0x80048554;
+constexpr int kBitsWindow = 180;
+
+// The Digimon the player has (eight, 0x3DC bytes each, the first at kRoster): experience in the word at +0, then HP
+// and maximum HP in the halfwords at +8 and +10, MP and maximum MP at +12 and +14. A battle writes the party's HP back
+// as it ends (a knocked-out member keeps 1 HP), before its results screens.
+constexpr uint32_t kRoster = 0x80048C68, kRosterStride = 0x3DC, kRosterSize = 8;
+constexpr uint32_t kRosterHp = 8, kRosterMaxHp = 10, kRosterMp = 12, kRosterMaxMp = 14;
+constexpr uint16_t kMaxStat = 9999;
 
 enum Encounters { kNormal, kHalf, kOff, kDouble };
 
@@ -124,6 +139,55 @@ GameplayHooks::GameplayHooks(dw3::Machine& machine, SettingsController& controll
     machine_.override_function(kAttackTask, &GameplayHook::attack_task);
     machine_.override_function(kFinaliseShare, &GameplayHook::finalise_share);
     machine_.override_function(kTextWindowTick, &GameplayHook::text_window_tick);
+}
+
+void GameplayHooks::tick() {
+    RecompContext* ctx = &machine_.ctx();
+    const uint32_t mode = dw3_read32(ctx, kGameMode);
+    // Difficulty scales each enemy's HP once, when its record first shows full health; a record whose maximum is not the
+    // one written here is a new enemy (the next battle, or one that joins).
+    if (mode == kBattleMode) {
+        const int percent = enemy_hp_percent(controller_.active().gameplay.difficulty);
+        for (uint32_t i = 0; i < kSideMembers; ++i) {
+            const uint32_t record = kRecords + kSideStride * kEnemySide + kRecordSize * i;
+            const uint16_t max_hp = dw3_read16(ctx, record + kMaxHp), hp = dw3_read16(ctx, record + kHp);
+            if (percent == 100 || max_hp == 0 || max_hp == scaled_max_hp_[i] || hp != max_hp) continue;
+            scaled_max_hp_[i] = static_cast<uint16_t>(scaled_enemy_hp(max_hp, percent));
+            dw3_write16(ctx, record + kMaxHp, scaled_max_hp_[i]);
+            dw3_write16(ctx, record + kHp, scaled_max_hp_[i]);
+        }
+    } else {
+        scaled_max_hp_ = {};
+    }
+    const uint32_t bits = dw3_read32(ctx, kBits);
+    if (mode == kResultsMode) {
+        if (!in_results_) bits_before_ = bits;
+        in_results_ = true;
+        bits_window_ = kBitsWindow;
+    } else {
+        if (in_results_ && controller_.active().gameplay.heal_after_battle) {
+            // The results screens of a won battle have ended: the whole roster gets its HP and MP back.
+            for (uint32_t i = 0; i < kRosterSize; ++i) {
+                const uint32_t digimon = kRoster + kRosterStride * i;
+                for (const auto [value, max] : {std::pair{kRosterHp, kRosterMaxHp}, std::pair{kRosterMp, kRosterMaxMp}}) {
+                    const uint16_t top = dw3_read16(ctx, digimon + max);
+                    if (top > 0 && top <= kMaxStat) dw3_write16(ctx, digimon + value, top);
+                }
+            }
+        }
+        in_results_ = false;
+    }
+    if (bits_window_ <= 0) return;
+    if (bits > bits_before_) {
+        if (!in_results_) {
+            const int multiplier = bits_multiplier(controller_.active().gameplay.bits_multiplier);
+            if (multiplier > 1) dw3_write32(ctx, kBits, scaled_bits(bits_before_, bits - bits_before_, multiplier));
+            bits_window_ = 0;
+        }
+        return;
+    }
+    if (bits < bits_before_) bits_before_ = bits;
+    if (!in_results_) --bits_window_;
 }
 
 GameplayHooks::~GameplayHooks() {

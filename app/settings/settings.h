@@ -69,6 +69,9 @@ struct Settings {
         bool left_stick = true;      // the left stick moves like the D-pad
         int deadzone = 25;           // percent of stick travel that does nothing
         int prompts = 0;             // choice: auto, xbox, playstation, nintendo (names of gamepad buttons in hints)
+        bool touch_vibration = true; // phones: a short vibration for each press of an on-screen button
+        int touch_size = 100;        // percent: size of the on-screen controls
+        int touch_opacity = 100;     // percent: how opaque the on-screen controls are
         std::array<std::string, input::kActionCount> bindings = input::default_binding_texts();  // "Z|South" per action
         bool operator==(const Controls&) const = default;
     } controls;
@@ -78,6 +81,7 @@ struct Settings {
         std::string memcard2;        // empty selects <user data dir>/memcards/slot2.mcd
         std::string disc_path;       // the disc image chosen in the first-run setup; empty if none yet
         int fast_forward_speed = 1;  // choice: 2x, 4x, unlimited
+        bool resume = false;         // keep a save state of the running game every minute and offer it at the next start
         bool operator==(const System&) const = default;
     } system;
 
@@ -86,7 +90,14 @@ struct Settings {
         int game_speed = 0;          // choice: 1x, 2x, 3x, 4x
         bool god_mode = false;       // the party takes no damage and defeats enemies in one hit
         int xp_multiplier = 0;       // choice: 1x, 2x, 3x, 5x, 10x (experience from won battles)
+        int bits_multiplier = 0;     // choice: 1x, 2x, 3x, 5x, 10x (bits from won battles)
+        bool minimap = false;        // a small map of the field in a corner (GPU renderer)
+        bool heal_after_battle = false;  // the HP and MP of every Digimon are refilled after each won battle
+        int difficulty = 0;          // choice: normal, easy, hard (enemies' HP: 100%, 60%, 130%)
         int text_speed = 0;          // choice: normal, fast, instant (how quickly message windows print)
+        bool auto_battle = false;    // battles fight themselves: the party attacks the first enemy every turn
+        int battle_speed = 0;        // choice: 1x, 2x, 3x, 4x (the game speed while a battle or its results run)
+        int field_speed = 0;         // choice: 1x, 2x, 3x, 4x (the game speed while walking a field map)
         bool operator==(const Gameplay&) const = default;
     } gameplay;
 

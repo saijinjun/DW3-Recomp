@@ -27,8 +27,9 @@ private:
 // time it is asked for and kept while the disc stays the same.
 class StageLibraryCache {
 public:
-    // Null when seamless backgrounds are off or the disc has no stage packs (logged once).
-    std::shared_ptr<dw3::texrep::StageLibrary> get(const Settings::Graphics& g, const std::string& disc_path);
+    // Null when neither seamless backgrounds, widescreen nor the minimap (`minimap`) need it, or the disc has no stage
+    // packs (logged once).
+    std::shared_ptr<dw3::texrep::StageLibrary> get(const Settings::Graphics& g, const std::string& disc_path, bool minimap = false);
 
 private:
     std::string disc_;

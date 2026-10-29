@@ -34,6 +34,7 @@ constexpr std::string_view kSpeeds[] = {"2x", "4x", "unlimited"};
 constexpr std::string_view kEncounters[] = {"normal", "half", "off", "double"};
 constexpr std::string_view kGameSpeeds[] = {"1x", "2x", "3x", "4x"};
 constexpr std::string_view kXpMultipliers[] = {"1x", "2x", "3x", "5x", "10x"};
+constexpr std::string_view kDifficulties[] = {"normal", "easy", "hard"};
 constexpr std::string_view kTextSpeeds[] = {"normal", "fast", "instant"};
 constexpr std::string_view kPads[] = {"auto", "1", "2", "3", "4"};
 constexpr std::string_view kPrompts[] = {"auto", "xbox", "playstation", "nintendo"};
@@ -130,6 +131,12 @@ const SettingInfo kSettings[] = {
      Group::Controls, Type::Int, Apply::Live, 10, 50, {}, false, DW3_FIELD(controls.deadzone)},
     {"controls.prompts", "Button prompts", "Names of gamepad buttons in on-screen hints: auto follows the connected pad.",
      Group::Controls, Type::Choice, Apply::Live, 0, 0, kPrompts, false, DW3_FIELD(controls.prompts)},
+    {"controls.touch_vibration", "Touch vibration", "Phones: a short vibration for each press of an on-screen button.",
+     Group::Controls, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(controls.touch_vibration)},
+    {"controls.touch_size", "Touch control size", "Phones: the size of the on-screen controls, in percent.",
+     Group::Controls, Type::Int, Apply::Live, 70, 130, {}, false, DW3_FIELD(controls.touch_size)},
+    {"controls.touch_opacity", "Touch control opacity", "Phones: how opaque the on-screen controls are, in percent.",
+     Group::Controls, Type::Int, Apply::Live, 20, 100, {}, false, DW3_FIELD(controls.touch_opacity)},
     {"controls.up", "Up binding", "Keyboard key and gamepad button for Up, written as key|button (for example Z|South). Reserved keys cannot be moved.",
      Group::Controls, Type::String, Apply::Live, 0, 0, {}, true, DW3_FIELD(controls.bindings[0])},
     {"controls.down", "Down binding", "Keyboard key and gamepad button for Down, written as key|button (for example Z|South). Reserved keys cannot be moved.",
@@ -181,6 +188,8 @@ const SettingInfo kSettings[] = {
      Group::System, Type::String, Apply::Restart, 0, 0, {}, true, DW3_FIELD(system.disc_path)},
     {"system.fast_forward_speed", "Fast-forward speed", "Speed while fast-forwarding (hold Tab, or press F10 to latch it).",
      Group::System, Type::Choice, Apply::Live, 0, 0, kSpeeds, false, DW3_FIELD(system.fast_forward_speed)},
+    {"system.resume", "Resume where you left off", "Keeps a save state of the running game, updated every minute and when the app goes to the background, and offers to continue from it at the next start (phones close games in the background).",
+     Group::System, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(system.resume)},
 
     {"gameplay.encounters", "Random encounters", "How often random battles start while walking: normal, half as often, never, or twice as often.",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kEncounters, false, DW3_FIELD(gameplay.encounters)},
@@ -190,8 +199,22 @@ const SettingInfo kSettings[] = {
      Group::Gameplay, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(gameplay.god_mode)},
     {"gameplay.xp_multiplier", "XP multiplier", "Multiplies the experience each Digimon gets from a won battle.",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kXpMultipliers, false, DW3_FIELD(gameplay.xp_multiplier)},
+    {"gameplay.bits_multiplier", "Bits multiplier", "Multiplies the bits (money) a won battle pays.",
+     Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kXpMultipliers, false, DW3_FIELD(gameplay.bits_multiplier)},
+    {"gameplay.heal_after_battle", "Heal after battle", "Refills the HP and MP of every Digimon when the results of a won battle end.",
+     Group::Gameplay, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(gameplay.heal_after_battle)},
+    {"gameplay.difficulty", "Difficulty", "Enemies' HP in battle: normal as the original, easy (60%) or hard (130%).",
+     Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kDifficulties, false, DW3_FIELD(gameplay.difficulty)},
+    {"gameplay.minimap", "Minimap", "Shows a small map of the field you are walking, with the part on screen outlined and a dot for the party (GPU renderer only; the map pictures come from your disc).",
+     Group::Gameplay, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(gameplay.minimap)},
     {"gameplay.text_speed", "Text speed", "How fast message boxes print their text: normal, fast, or the whole box at once (a button still closes it).",
      Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kTextSpeeds, false, DW3_FIELD(gameplay.text_speed)},
+    {"gameplay.auto_battle", "Auto-battle", "Battles fight themselves: every turn the party picks Fight and attacks, and the results screens are passed. Pressing any button for a moment hands a turn back to you.",
+     Group::Gameplay, Type::Bool, Apply::Live, 0, 0, {}, false, DW3_FIELD(gameplay.auto_battle)},
+    {"gameplay.battle_speed", "Battle speed", "Runs battles and their results faster than the rest of the game (the higher of this and the game speed applies).",
+     Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kGameSpeeds, false, DW3_FIELD(gameplay.battle_speed)},
+    {"gameplay.field_speed", "Field speed", "Runs the field faster than the rest of the game, so walking between places takes less time (the higher of this and the game speed applies).",
+     Group::Gameplay, Type::Choice, Apply::Live, 0, 0, kGameSpeeds, false, DW3_FIELD(gameplay.field_speed)},
 };
 
 #undef DW3_FIELD

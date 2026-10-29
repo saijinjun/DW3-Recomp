@@ -49,12 +49,23 @@ constexpr Labels kLabels[] = {
     {"controls.left_stick", "Left Stick", 1},
     {"controls.deadzone", "Deadzone", 5},
     {"controls.prompts", "Prompts", 1},
+    {"controls.touch_vibration", "Vibration", 1},
+    {"controls.touch_size", "Touch Size", 10},
+    {"controls.touch_opacity", "Touch Opacity", 10},
     {"system.fast_forward_speed", "Fast Forward", 1},
+    {"system.resume", "Resume", 1},
     {"gameplay.encounters", "Encounters", 1},
     {"gameplay.game_speed", "Game Speed", 1},
     {"gameplay.god_mode", "God Mode", 1},
     {"gameplay.xp_multiplier", "XP", 1},
+    {"gameplay.bits_multiplier", "Bits", 1},
+    {"gameplay.difficulty", "Difficulty", 1},
+    {"gameplay.heal_after_battle", "Auto Heal", 1},
+    {"gameplay.minimap", "Minimap", 1},
     {"gameplay.text_speed", "Text Speed", 1},
+    {"gameplay.auto_battle", "Auto Battle", 1},
+    {"gameplay.battle_speed", "Battle Speed", 1},
+    {"gameplay.field_speed", "Field Speed", 1},
 };
 
 std::string capitalised(std::string_view name) {

@@ -422,6 +422,22 @@ TEST(Experience, AwardScalesAndStopsAtTheFieldMaximum) {
     EXPECT_EQ(scaled_experience(6, 0), 6u);
 }
 
+TEST(Bits, RewardScalesUpToTheCapButNeverBelowTheGrant) {
+    EXPECT_EQ(scaled_bits(50, 10, 3), 80u);
+    EXPECT_EQ(scaled_bits(50, 10, 1), 60u);
+    EXPECT_EQ(scaled_bits(kMaxBits - 50, 10, 10), kMaxBits);
+    EXPECT_EQ(scaled_bits(kMaxBits + 100, 10, 10), kMaxBits + 110);  // above the cap already: the game's own grant stands
+    EXPECT_EQ(bits_multiplier(4), 10);
+}
+
+TEST(Difficulty, EnemyHpScalesWithinTheBattleField) {
+    EXPECT_EQ(scaled_enemy_hp(120, enemy_hp_percent(0)), 120u);
+    EXPECT_EQ(scaled_enemy_hp(120, enemy_hp_percent(1)), 72u);
+    EXPECT_EQ(scaled_enemy_hp(120, enemy_hp_percent(2)), 156u);
+    EXPECT_EQ(scaled_enemy_hp(1, 60), 1u);
+    EXPECT_EQ(scaled_enemy_hp(0x3000, 160), 0x3FFFu);
+}
+
 TEST(AudioSettings, MusicAndEffectsDefaultToFullAndRoundTrip) {
     Settings s = defaults();
     EXPECT_EQ(get_text(s, *find_setting("audio.music_volume")), "100");

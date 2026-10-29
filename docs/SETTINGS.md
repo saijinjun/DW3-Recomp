@@ -63,16 +63,27 @@ everything else applies immediately.
 | `controls.left_stick` | bool | |
 | `controls.deadzone` | 10 to 50 (percent) | |
 | `controls.prompts` | `auto`, `xbox`, `playstation`, `nintendo` | |
+| `controls.touch_vibration` | bool | |
+| `controls.touch_size` | 70 to 130 (percent) | |
+| `controls.touch_opacity` | 20 to 100 (percent) | |
 | `controls.<action>` | binding text, see Controls | |
 | `system.memcards` (restart) | bool | `--no-memcard` |
 | `system.memcard1`, `system.memcard2` (restart) | paths, empty for the defaults | `--memcard1`, `--memcard2` |
 | `system.disc_path` (restart) | path of the disc image (`.cue`); written by the first-run setup, not listed in the in-game screen | `--disc` |
 | `system.fast_forward_speed` | `2x`, `4x`, `unlimited` | `--fast-forward-speed` |
+| `system.resume` | bool | |
 | `gameplay.encounters` | `normal`, `half`, `off`, `double` | `--encounters` |
 | `gameplay.game_speed` | `1x`, `2x`, `3x`, `4x` | `--game-speed` |
 | `gameplay.god_mode` | bool | `--god-mode` |
 | `gameplay.xp_multiplier` | `1x`, `2x`, `3x`, `5x`, `10x` | `--xp-multiplier` |
+| `gameplay.bits_multiplier` | `1x`, `2x`, `3x`, `5x`, `10x` | |
+| `gameplay.difficulty` | `normal`, `easy`, `hard` | |
+| `gameplay.heal_after_battle` | bool | |
+| `gameplay.minimap` | bool | |
 | `gameplay.text_speed` | `normal`, `fast`, `instant` | `--text-speed` |
+| `gameplay.auto_battle` | bool | |
+| `gameplay.battle_speed` | `1x`, `2x`, `3x`, `4x` | |
+| `gameplay.field_speed` | `1x`, `2x`, `3x`, `4x` | |
 
 ## Gameplay options
 
@@ -159,6 +170,9 @@ Making a pack:
    any model in that program's format; `RealESRGAN_General_x4_v3` gave the best results of the ones we tried. Put the
    program and its `models` folder in `<user data dir>/tools`, or give their locations on the command line. The game
    and the pack tool never download anything by themselves.
+   Without a Vulkan GPU, `tools/models/realesrgan_cpu.py` (Python 3 with numpy and Pillow) runs the same compact models
+   on the processor from the same model files: pass `--upscaler tools/models/realesrgan_cpu.py`. It is much slower
+   (a whole disc at `--scale 2` takes a couple of hours on four cores).
 2. Play the areas you want improved with `--dump-textures <folder>`, for example
    `dw3recomp --dump-textures dump-town`. Every background image that is drawn for a while is recorded; leaving the
    game writes the folder. Use one folder per session; the pack tool takes several. Walk around to scroll through

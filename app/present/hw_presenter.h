@@ -22,6 +22,7 @@ public:
     void surface_changed() override;
     bool set_texture_dump(const std::string& directory) override;
     bool write_texture_dump(std::string& error) override;
+    bool field_position(int& map, int& scroll_x, int& scroll_y, uint64_t& frame) const override;
 
 private:
     HwPresenter();
