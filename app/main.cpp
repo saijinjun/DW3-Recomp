@@ -1072,7 +1072,7 @@ int main(int argc, char** argv) {
                 minimap_w = image ? image->w : 0;
                 minimap_h = image ? image->h : 0;
                 minimap_x = minimap_large ? (ww - minimap_w) / 2 : u * 5 / 100;
-                minimap_y = minimap_large ? (wh - minimap_h) / 2 : u * 25 / 100;
+                minimap_y = minimap_large ? (wh - minimap_h) / 2 : u * 28 / 100;  // below L1
                 presenter->set_panel(0, image, minimap_x, minimap_y, minimap.serial());
             }
         } else {
