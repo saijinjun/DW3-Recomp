@@ -107,6 +107,7 @@
 #include "ingame/gameplay.h"
 #include "frame_stats.h"
 #include "present/minimap.h"
+#include "present/party_hud.h"
 #include "present/monitors.h"
 #include "present/native_window.h"
 #include "settings/controller.h"
@@ -591,6 +592,8 @@ int main(int argc, char** argv) {
     // Where the minimap is on screen (w = 0 while hidden), and whether a tap on it made it large.
     int minimap_x = 0, minimap_y = 0, minimap_w = 0, minimap_h = 0;
     bool minimap_large = false;
+    // The party HUD (gameplay.party_hud).
+    dw3app::PartyHud party_hud;
 #if defined(DW3_ANDROID)
     // On-screen controls; they hide while a gamepad is used and come back when the screen is touched.
     dw3app::TouchControls touch;
@@ -1070,11 +1073,24 @@ int main(int argc, char** argv) {
                 minimap_h = image ? image->h : 0;
                 minimap_x = minimap_large ? (ww - minimap_w) / 2 : u * 5 / 100;
                 minimap_y = minimap_large ? (wh - minimap_h) / 2 : u * 25 / 100;
-                presenter->set_panel(image, minimap_x, minimap_y, minimap.serial());
+                presenter->set_panel(0, image, minimap_x, minimap_y, minimap.serial());
             }
         } else {
-            presenter->set_panel(nullptr, 0, 0, 0);
+            presenter->set_panel(0, nullptr, 0, 0, 0);
             minimap_w = 0;
+        }
+        // The party HUD, in the field, on the right between the shoulder and the face buttons.
+        if (settings.active().gameplay.party_hud && in_field) {
+            if (frame % 6 == 0) {
+                int ww = 0, wh = 0;
+                SDL_GetWindowSizeInPixels(window, &ww, &wh);
+                const int u = std::min(ww, wh);
+                const dw3app::PartyState party = dw3app::read_party([&](uint32_t addr) { return dw3_read32(&machine.ctx(), addr); });
+                const dw3app::OsdImage* image = party_hud.frame(party, u * 34 / 100);
+                presenter->set_panel(1, image, image ? ww - u * 5 / 100 - image->w : 0, u * 30 / 100, party_hud.serial());
+            }
+        } else {
+            presenter->set_panel(1, nullptr, 0, 0, 0);
         }
         const auto& shown = settings.active().graphics;
         // Frame pacing "even" repeats presents only while the measured gap between back-to-back presents says the
