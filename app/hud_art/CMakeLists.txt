@@ -1,7 +1,8 @@
-# Art for the overlays (party HUD): raw RGBA images cut from the owner's HUD asset sheet and embedded in the executable.
-# hud_frame.rgba is 480x205, hud_coin.rgba 64x64 (straight alpha, red in the first byte).
+# Art for the overlays (party HUD, touch controls): raw RGBA images cut from the owner's HUD asset sheet and embedded in the executable.
+# hud_frame.rgba is 480x205, hud_coin.rgba 64x64, touch_dpad.rgba 256x256, touch_face.rgba 128x128, touch_shoulder_l.rgba and
+# touch_shoulder_r.rgba 256x96, touch_pill.rgba 192x64 (straight alpha, red in the first byte).
 set(DW3_HUD_ART_HEADERS)
-foreach(art hud_frame hud_coin)
+foreach(art hud_frame hud_coin touch_dpad touch_face touch_shoulder_l touch_shoulder_r touch_pill)
     set(header ${CMAKE_CURRENT_BINARY_DIR}/${art}_data.h)
     add_custom_command(
         OUTPUT ${header}

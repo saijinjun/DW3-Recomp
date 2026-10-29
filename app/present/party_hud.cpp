@@ -55,33 +55,7 @@ public:
     }
     // `pic` scaled into the w x h box at (x0, y0) (bilinear), blended over what is there.
     void picture(const hud_art::Picture& pic, int x0, int y0, int w, int h) {
-        if (w <= 0 || h <= 0) return;
-        for (int y = std::max(0, y0); y < std::min(img_.h, y0 + h); ++y)
-            for (int x = std::max(0, x0); x < std::min(img_.w, x0 + w); ++x) {
-                const float sx = std::clamp((static_cast<float>(x - x0) + 0.5f) * static_cast<float>(pic.w) / static_cast<float>(w) - 0.5f, 0.0f, static_cast<float>(pic.w - 1));
-                const float sy = std::clamp((static_cast<float>(y - y0) + 0.5f) * static_cast<float>(pic.h) / static_cast<float>(h) - 0.5f, 0.0f, static_cast<float>(pic.h - 1));
-                const int ix = std::min(static_cast<int>(sx), pic.w - 2 < 0 ? 0 : pic.w - 2), iy = std::min(static_cast<int>(sy), pic.h - 2 < 0 ? 0 : pic.h - 2);
-                const float fx = sx - static_cast<float>(ix), fy = sy - static_cast<float>(iy);
-                float ch[4] = {0, 0, 0, 0};
-                for (int k = 0; k < 4; ++k) {
-                    const int px = std::min(ix + (k & 1), pic.w - 1), py = std::min(iy + (k >> 1), pic.h - 1);
-                    const uint32_t c = pic.rgba[static_cast<std::size_t>(py) * static_cast<std::size_t>(pic.w) + static_cast<std::size_t>(px)];
-                    const float wgt = ((k & 1) ? fx : 1.0f - fx) * ((k >> 1) ? fy : 1.0f - fy);
-                    const float a = static_cast<float>(c >> 24) / 255.0f;
-                    for (int i = 0; i < 3; ++i) ch[i] += static_cast<float>((c >> (8 * i)) & 0xFF) * a * wgt;  // premultiplied
-                    ch[3] += a * wgt;
-                }
-                if (ch[3] <= 0.0f) continue;
-                uint32_t& d = at(x, y);
-                const float da = static_cast<float>(d >> 24) / 255.0f, sa = ch[3];
-                const float oa = sa + da * (1.0f - sa);
-                uint32_t out = static_cast<uint32_t>(std::lround(oa * 255.0f)) << 24;
-                for (int i = 0; i < 3; ++i) {
-                    const float dc = static_cast<float>((d >> (8 * i)) & 0xFF);
-                    out |= static_cast<uint32_t>(std::clamp(std::lround((ch[i] + dc * da * (1.0f - sa)) / oa), 0l, 255l)) << (8 * i);
-                }
-                d = out;
-            }
+        hud_art::blit(img_.rgba.data(), img_.w, img_.h, pic, x0, y0, w, h);
     }
     // Text in the OSD font with its top-left at (x, y). Returns its width.
     int text(const std::string& s, int x, int y, int scale, uint32_t c) {
