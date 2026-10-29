@@ -85,6 +85,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <span>
 #include <optional>
@@ -310,6 +311,7 @@ int main(int argc, char** argv) {
             // First start on a phone: the quality-of-life options on, so the game plays smoother than the original
             // out of the box. All of them can be changed (or set back to the original) in the in-game menu.
             for (const auto& [id, value] : {std::pair<const char*, const char*>{"graphics.preset", "enhanced"},
+                                            {"graphics.internal_res", "2"},
                                             {"graphics.widescreen", "16:9"},
                                             {"gameplay.encounters", "half"},
                                             {"gameplay.xp_multiplier", "2x"},
@@ -325,6 +327,20 @@ int main(int argc, char** argv) {
             else SDL_Log("settings: %s", err.c_str());
         }
     }
+#if defined(DW3_ANDROID)
+    // Phones set up before the 2x default got the Enhanced preset's 4x, which makes battles stutter (they render every
+    // emulated frame, twice as many at 2x battle speed). Lowered once; the settings screen can raise it again.
+    {
+        const std::filesystem::path marker = dw3::platform::user_data_dir() / "phone-tuning-1";
+        std::error_code marker_ec;
+        if (!config_file.empty() && !std::filesystem::exists(marker, marker_ec)) {
+            std::string err;
+            if (stored.graphics.internal_res > 2 && dw3app::set_text(stored, *dw3app::find_setting("graphics.internal_res"), "2", err))
+                dw3app::save_settings_file(config_file, stored, err);
+            std::ofstream(marker, std::ios::binary) << "1\n";
+        }
+    }
+#endif
     dw3app::Settings active = stored;
 #if defined(DW3_ANDROID)
     // A phone has no windows: the game always fills the screen.
