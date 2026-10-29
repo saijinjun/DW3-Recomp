@@ -555,6 +555,13 @@ int main(int argc, char** argv) {
             const int usable = po.texture_pack ? po.texture_pack->scale() : po.texture_filter == 2 ? 2 : 1;
             po.internal_res = std::min(g.internal_res, std::max(usable, 1));
         }
+#ifdef __ANDROID__
+        // Battles are 3D and drawn at the full internal resolution: on a phone 4x and up (Remaster is 8x) cannot keep 60
+        // frames a second, and a phone screen shows little of the difference, so phones draw them at 2x at most.
+        else {
+            po.internal_res = std::min(g.internal_res, 2);
+        }
+#endif
         po.seamless_bg = g.seamless_bg;
         const char* modes[] = {"fit", "integer", "stretch"};
         dw3::parse_scale_mode(modes[g.scale_mode], po.scale);
