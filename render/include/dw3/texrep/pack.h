@@ -12,7 +12,8 @@
 //   clut  = "fedcba9876543210"     # hash of the palette it was drawn with
 //   width = 128                    # size of the original image in texels
 //   height = 128
-//   file  = "tex/0123456789abcdef_fedcba9876543210.png"   # (width * scale) x (height * scale), RGBA or RGB
+//   file  = "tex/0123456789abcdef_fedcba9876543210.png"   # (width * scale) x (height * scale), RGBA or RGB;
+//                                                         # PNG, or JPEG for opaque images
 
 #include <cstdint>
 #include <filesystem>

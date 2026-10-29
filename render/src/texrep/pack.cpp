@@ -37,7 +37,7 @@ bool decode_png(const uint8_t* data, std::size_t size, Image& out, std::string& 
     int w = 0, h = 0, channels = 0;
     unsigned char* px = stbi_load_from_memory(data, static_cast<int>(size), &w, &h, &channels, 4);
     if (!px) {
-        error = std::string("cannot decode PNG: ") + stbi_failure_reason();
+        error = std::string("cannot decode image: ") + stbi_failure_reason();
         return false;
     }
     out.w = w;
