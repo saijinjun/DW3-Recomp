@@ -77,6 +77,7 @@ add_custom_target(recompile
     COMMENT "Recompiling game code with psxrecomp")
 
 add_subdirectory(app/icon)
+add_subdirectory(app/hud_art)
 add_subdirectory(app/input)
 add_subdirectory(app/settings)
 add_subdirectory(app/ingame)

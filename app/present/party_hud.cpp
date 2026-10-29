@@ -3,14 +3,14 @@
 #include <algorithm>
 #include <cmath>
 
+#include "hud_art.h"
+
 namespace dw3app {
 
 namespace {
 
 constexpr uint32_t rgba(uint32_t r, uint32_t g, uint32_t b, uint32_t a = 255) { return r | (g << 8) | (b << 16) | (a << 24); }
 
-constexpr uint32_t kPanel = rgba(16, 24, 40, 200);
-constexpr uint32_t kEdge = rgba(90, 200, 255, 230);
 constexpr uint32_t kTrack = rgba(0, 0, 0, 170);
 constexpr uint32_t kName = rgba(245, 245, 245);
 constexpr uint32_t kDim = rgba(170, 190, 210);
@@ -52,6 +52,36 @@ public:
         fill(x, y, x + filled, y + h, c);
         const uint32_t light = (c & 0xFF000000u) | ((((c & 0xFEFEFEu) >> 1) + 0x7F7F7Fu) & 0xFFFFFFu);
         if (h >= 3) fill(x, y, x + filled, y + std::max(1, h / 4), light);
+    }
+    // `pic` scaled into the w x h box at (x0, y0) (bilinear), blended over what is there.
+    void picture(const hud_art::Picture& pic, int x0, int y0, int w, int h) {
+        if (w <= 0 || h <= 0) return;
+        for (int y = std::max(0, y0); y < std::min(img_.h, y0 + h); ++y)
+            for (int x = std::max(0, x0); x < std::min(img_.w, x0 + w); ++x) {
+                const float sx = std::clamp((static_cast<float>(x - x0) + 0.5f) * static_cast<float>(pic.w) / static_cast<float>(w) - 0.5f, 0.0f, static_cast<float>(pic.w - 1));
+                const float sy = std::clamp((static_cast<float>(y - y0) + 0.5f) * static_cast<float>(pic.h) / static_cast<float>(h) - 0.5f, 0.0f, static_cast<float>(pic.h - 1));
+                const int ix = std::min(static_cast<int>(sx), pic.w - 2 < 0 ? 0 : pic.w - 2), iy = std::min(static_cast<int>(sy), pic.h - 2 < 0 ? 0 : pic.h - 2);
+                const float fx = sx - static_cast<float>(ix), fy = sy - static_cast<float>(iy);
+                float ch[4] = {0, 0, 0, 0};
+                for (int k = 0; k < 4; ++k) {
+                    const int px = std::min(ix + (k & 1), pic.w - 1), py = std::min(iy + (k >> 1), pic.h - 1);
+                    const uint32_t c = pic.rgba[static_cast<std::size_t>(py) * static_cast<std::size_t>(pic.w) + static_cast<std::size_t>(px)];
+                    const float wgt = ((k & 1) ? fx : 1.0f - fx) * ((k >> 1) ? fy : 1.0f - fy);
+                    const float a = static_cast<float>(c >> 24) / 255.0f;
+                    for (int i = 0; i < 3; ++i) ch[i] += static_cast<float>((c >> (8 * i)) & 0xFF) * a * wgt;  // premultiplied
+                    ch[3] += a * wgt;
+                }
+                if (ch[3] <= 0.0f) continue;
+                uint32_t& d = at(x, y);
+                const float da = static_cast<float>(d >> 24) / 255.0f, sa = ch[3];
+                const float oa = sa + da * (1.0f - sa);
+                uint32_t out = static_cast<uint32_t>(std::lround(oa * 255.0f)) << 24;
+                for (int i = 0; i < 3; ++i) {
+                    const float dc = static_cast<float>((d >> (8 * i)) & 0xFF);
+                    out |= static_cast<uint32_t>(std::clamp(std::lround((ch[i] + dc * da * (1.0f - sa)) / oa), 0l, 255l)) << (8 * i);
+                }
+                d = out;
+            }
     }
     // Text in the OSD font with its top-left at (x, y). Returns its width.
     int text(const std::string& s, int x, int y, int scale, uint32_t c) {
@@ -124,17 +154,21 @@ const OsdImage* PartyHud::frame(const PartyState& state, int width) {
 
     const int s = std::max(1, width / 160);   // font pixels per glyph pixel
     const int glyph = kOsdGlyph * s;
-    const int pad = 4 * s, line = glyph + 2 * s, hp_h = 3 * s, mp_h = 2 * s, row_gap = 4 * s;
+    const int line = glyph + 2 * s, hp_h = 3 * s, mp_h = 2 * s, row_gap = 4 * s;
     const int row = line + hp_h + s + mp_h + row_gap;
+    // The content sits inside the frame's inner border: about 7% of the width in from each side, 14% of the height
+    // from the top and 12% from the bottom.
+    const int content_h = row * state.count + line;
+    const int pad_x = width * 7 / 100;
     image_.w = width;
-    image_.h = pad + row * state.count + line + pad;
+    image_.h = content_h * 100 / 74 + 1;
+    const int top = image_.h * 14 / 100;
     image_.rgba.assign(static_cast<std::size_t>(image_.w) * static_cast<std::size_t>(image_.h), 0u);
     Canvas c(image_);
-    c.rounded(0, 0, image_.w, image_.h, static_cast<float>(4 * s), kPanel);
-    c.fill(4 * s, 0, image_.w - 4 * s, std::max(1, s), kEdge);  // accent line along the top
+    c.picture(hud_art::frame(), 0, 0, image_.w, image_.h);
 
-    const int inner = image_.w - 2 * pad;
-    int y = pad;
+    const int inner = image_.w - 2 * pad_x;
+    int y = top;
     for (int i = 0; i < state.count; ++i) {
         const PartyMember& m = state.members[static_cast<std::size_t>(i)];
         const std::string level = "Lv" + std::to_string(m.level);
@@ -143,18 +177,18 @@ const OsdImage* PartyHud::frame(const PartyState& state, int width) {
         // The name gets what the HP figures and the level leave over.
         const int room = std::max(0, (inner - hp_w - glyph) / glyph - static_cast<int>(level.size()) - 1);
         const std::string name = m.name.substr(0, static_cast<std::size_t>(room));
-        int x = pad + c.text(name, pad, y, s, kName);
+        int x = pad_x + c.text(name, pad_x, y, s, kName);
         c.text(level, x + glyph / 2, y, s, kDim);
-        c.text(hp, pad + inner - hp_w, y, s, kName);
+        c.text(hp, pad_x + inner - hp_w, y, s, kName);
         y += line;
-        c.bar(pad, y, inner, hp_h, m.hp, m.max_hp, hp_colour(m.hp, m.max_hp));
+        c.bar(pad_x, y, inner, hp_h, m.hp, m.max_hp, hp_colour(m.hp, m.max_hp));
         y += hp_h + s;
-        c.bar(pad, y, inner, mp_h, m.mp, m.max_mp, kMp);
+        c.bar(pad_x, y, inner, mp_h, m.mp, m.max_mp, kMp);
         y += mp_h + row_gap;
     }
-    const int coin = glyph / 2;
-    c.rounded(pad, y + (glyph - 2 * coin) / 2, pad + 2 * coin, y + (glyph - 2 * coin) / 2 + 2 * coin, static_cast<float>(coin), kBits);
-    c.text(std::to_string(state.bits) + " bits", pad + 2 * coin + glyph / 2, y, s, kBits);
+    const int coin = glyph + 2 * s;
+    c.picture(hud_art::coin(), pad_x, y - s, coin, coin);
+    c.text(std::to_string(state.bits) + " bits", pad_x + coin + glyph / 2, y, s, kBits);
     ++serial_;
     return &image_;
 }
