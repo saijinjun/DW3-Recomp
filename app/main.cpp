@@ -908,7 +908,7 @@ int main(int argc, char** argv) {
     dw3app::PresentCadence present_cadence;
     bool pacer_started = false, fast_forwarding = false, display_changed = false, fps_shown = false;
     uint64_t fps_window_start = SDL_GetTicksNS();
-    uint64_t last_shown_ns = 0;  // when a frame was last presented
+    uint64_t last_shown_ns = 0;  // when the last present returned
     int fps_frames = 0;
     constexpr uint64_t kFpsWindowNs = 500'000'000;
     dw3app::FrameStats frame_stats;
@@ -1126,14 +1126,16 @@ int main(int argc, char** argv) {
         const int planned = present_cadence.plan_frame();
         const uint64_t present_began_ns = SDL_GetTicksNS();
         // Faster than real time the frames come quicker than the display shows them, so only one per refresh is
-        // presented. Where vsync cannot be turned off (most phones) every present would wait for one and cap the speed.
+        // presented. Where vsync cannot be turned off (most phones) every present waits for the display, so the gap is
+        // counted from when the last present returned: counting from when it began, the wait itself filled the gap and
+        // every frame was presented, holding the game to normal speed.
         const bool sped_up = fast_forward.active() || speed_choice(settings.active()) != 0;
         const uint64_t refresh_ns = static_cast<uint64_t>(1e9 / (refresh_hz > 0.0 ? refresh_hz : 60.0));
         const bool skip_present = sped_up && !want_shot && !unpaced && present_began_ns - last_shown_ns < refresh_ns * 9 / 10;
         const int presents = skip_present ? 0 : planned;
         if (!skip_present) {
             presenter->present(machine.gpu(), want_shot ? &capture : nullptr);
-            last_shown_ns = present_began_ns;
+            last_shown_ns = SDL_GetTicksNS();
         }
         uint64_t last_present_ns = presents > 1 ? SDL_GetTicksNS() : 0;
         for (int again = 1; again < presents; ++again) {
