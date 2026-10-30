@@ -162,9 +162,10 @@ void TouchControls::layout(int w, int h) {
     controls_.push_back({S::Rect, dw3::kPadSelect, -1, "SELECT", fw * 0.5f - mw - u * 0.03f, my, mw, mh, 0});
     controls_.push_back({S::Rect, dw3::kPadStart, -1, "START", fw * 0.5f + mw + u * 0.03f, my, mw, mh, 0});
     // App buttons at the top centre, at the standard size whatever the size setting: five in a row leave no room to grow
-    // between the shoulder buttons on a 16:9 screen.
+    // between the shoulder buttons on a 16:9 screen. They hug the top edge, low and flat, so they stay clear of the
+    // name and HP panels the game draws along the top of a battle.
     const float u0 = static_cast<float>(std::min(w, h));
-    const float aw = u0 * 0.075f, ah = u0 * 0.04f, ay = margin + ah;
+    const float aw = u0 * 0.075f, ah = u0 * 0.03f, ay = u0 * 0.012f + ah;
     const float gap = aw * 2 + u0 * 0.03f;
     controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::SaveState), "SAVE", fw * 0.5f - gap * 2.0f, ay, aw, ah, 0});
     controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::FastForward), ">>", fw * 0.5f - gap, ay, aw, ah, 0});

@@ -1109,9 +1109,9 @@ int main(int argc, char** argv) {
                 const int width = std::clamp(margin - u * 6 / 100, u * 30 / 100, u * 38 / 100);
                 const dw3app::BattleState battle = dw3app::read_battle([&](uint32_t addr) { return dw3_read32(&machine.ctx(), addr); });
                 const dw3app::OsdImage* cards = battle_hud.party(battle, width);
-                presenter->set_panel(1, cards, cards ? ww - u * 4 / 100 - cards->w : 0, u * 27 / 100, battle_hud.party_serial());
+                presenter->set_panel(1, cards, cards ? ww - u * 4 / 100 - cards->w : 0, u * 28 / 100, battle_hud.party_serial());
                 const dw3app::OsdImage* bars = battle_hud.enemies(battle, width);
-                presenter->set_panel(2, bars, u * 4 / 100, u * 27 / 100, battle_hud.enemies_serial());
+                presenter->set_panel(2, bars, u * 4 / 100, u * 28 / 100, battle_hud.enemies_serial());
             }
         } else {
             presenter->set_panel(1, nullptr, 0, 0, 0);
