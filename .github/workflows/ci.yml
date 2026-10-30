@@ -1,8 +1,13 @@
 name: CI
 
+# Branch pushes are tested through their pull request, so a push runs CI only on main. macOS minutes cost 10 times
+# Linux minutes and Windows twice, so those two jobs run on main and by hand (Actions > CI > Run workflow), not on every
+# pull request commit; release.yml still builds both for every version tag.
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -63,6 +68,7 @@ jobs:
 
   macos-arm64:
     name: macOS arm64 build and unit tests
+    if: github.event_name != 'pull_request'
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -82,6 +88,7 @@ jobs:
 
   windows:
     name: Windows x64 native build and unit tests
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     env:
       GLSLANG_VERSION: 16.6.0
