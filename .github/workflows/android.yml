@@ -11,7 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 # Builds the Android app (android/): the program for arm64 phones with the zig compiler and toolchain the setup uses to
-# build the game module from the player's own disc. The APK holds no game data. It is kept as a workflow artifact.
+# build the game module from the player's own disc, and the upscaler model for the HD backgrounds the phone makes from
+# that disc. The APK holds no game data. It is kept as a workflow artifact.
 
 jobs:
   apk:
@@ -58,6 +59,22 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.12
+
+      # Signed with the project's key when the repository has it as secrets (ANDROID_KEYSTORE_BASE64, the keystore file in
+      # base64, and ANDROID_KEYSTORE_PASSWORD), so that each build installs over the last; pull requests from forks get
+      # no secrets and are signed with the runner's debug key.
+      - name: Signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "DW3_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "DW3_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          else
+            echo "No signing key in the repository secrets: the APK is signed with a debug key."
+          fi
 
       - name: Build
         working-directory: android

@@ -75,9 +75,10 @@ bool run_pack_job(PackJob& job, GenerateReport& report, std::string& error) {
     options.scale = job.scale;
     options.model_scale = job.model_scale;
     options.pad = job.pad;
+    options.jpeg_quality = job.jpeg_quality;
     options.progress = job.progress;
 
-    BatchUpscaler upscale = [&](const std::vector<Image>& in, std::vector<Image>& out, std::string& err) {
+    BatchUpscaler program = [&](const std::vector<Image>& in, std::vector<Image>& out, std::string& err) {
         fs::remove_all(job.work / "in", ec);
         fs::remove_all(job.work / "out", ec);
         fs::create_directories(job.work / "in", ec);
@@ -106,7 +107,7 @@ bool run_pack_job(PackJob& job, GenerateReport& report, std::string& error) {
         }
         return true;
     };
-    return finish(generate_pack(dumps, job.out, options, upscale, report, error));
+    return finish(generate_pack(dumps, job.out, options, job.upscale ? job.upscale : program, report, error));
 }
 
 }  // namespace dw3::texrep

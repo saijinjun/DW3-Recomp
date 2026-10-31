@@ -733,6 +733,38 @@ TEST(TexrepGenerate, BuildsAPackFromADumpAndExtendsIt) {
     EXPECT_EQ(images_seen, 3u);
 }
 
+TEST(TexrepGenerate, JpegPacksNameAndStoreJpegFiles) {
+    TextureDump dump(1);
+    dump.add_variant(0xC, 1, 16, 8, solid(16, 8, 0xFF3366CC).rgba);
+    dump.observe(0xC, 1, 0, 0);
+    dump.end_frame();
+    const auto dump_dir = temp_dir("gen_jpeg_dump");
+    std::string error;
+    ASSERT_TRUE(dump.write(dump_dir, error)) << error;
+    const auto out = temp_dir("gen_jpeg_pack");
+    GenerateOptions options;
+    options.scale = 2;
+    options.model_scale = 2;
+    options.pad = 2;
+    options.jpeg_quality = 95;
+    BatchUpscaler up = [&](const std::vector<Image>& in, std::vector<Image>& result, std::string&) {
+        result.clear();
+        for (const Image& i : in) result.push_back(replicate(i, 2));
+        return true;
+    };
+    GenerateReport report;
+    ASSERT_TRUE(generate_pack({dump_dir}, out, options, up, report, error)) << error;
+    auto pack = TexturePack::load(out, error);
+    ASSERT_TRUE(pack) << error;
+    const PackEntry* e = pack->find(0xC, 1);
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(e->file.substr(e->file.size() - 4), ".jpg");
+    Image img;
+    ASSERT_TRUE(pack->load_image(*e, img, error)) << error;
+    EXPECT_EQ(img.w, 32);
+    EXPECT_EQ(img.h, 16);
+}
+
 TEST(TexrepGenerate, RefusesAScaleThatDoesNotDivideTheModelScale) {
     GenerateOptions options;
     options.scale = 3;

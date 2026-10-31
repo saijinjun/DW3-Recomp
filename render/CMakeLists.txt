@@ -21,6 +21,7 @@ add_library(dw3texrep STATIC
     src/texrep/stage_library.cpp
     src/texrep/field_backdrop.cpp
     src/texrep/window.cpp
+    src/texrep/upscaler.cpp
     src/texrep/stb_impl.cpp)
 target_include_directories(dw3texrep PUBLIC include)
 target_include_directories(dw3texrep SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/third_party/stb)
@@ -31,6 +32,8 @@ if(NOT MSVC)
     # The pack generator decodes and encodes thousands of images (the PNG writer dominates); unoptimised it takes minutes
     # longer in Debug builds, and it is batch code nobody steps through.
     target_compile_options(dw3texrep PRIVATE $<$<CONFIG:Debug>:-O2>)
+    # The built-in upscaler is nearly all multiply-adds; nothing compares its results bit for bit across platforms.
+    set_source_files_properties(src/texrep/upscaler.cpp PROPERTIES COMPILE_OPTIONS "-O3;-ffp-contract=fast")
 endif()
 
 if(DW3_HAVE_PLUME)

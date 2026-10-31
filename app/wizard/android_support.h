@@ -34,14 +34,8 @@ void capture_log();
 // Shows the kept log lines in a system dialog, which appears even when the game's picture does not.
 void show_log(const char* title);
 
-// A personal build may carry its owner's disc and the game module prepared from it as APK assets under bundle/
-// (android/app/build.gradle, -PbundleDir). Unpacks them into the user data directory the first time this build runs
-// and returns the disc image to use; nullopt when the APK has no bundle. `error` is set when unpacking fails.
-std::optional<std::string> install_bundle(const std::filesystem::path& user_data, std::string& error);
-
-// A personal build may also carry an HD background pack made from that disc (bundle/hd-pack.zip). Unpacks it into
-// <user data>/texture-packs/<pack_name> the first time this build runs. Returns true only when it was unpacked just now,
-// so that the caller can switch HD backgrounds on once. `error` is set when unpacking fails.
-bool install_bundled_pack(const std::filesystem::path& user_data, const std::string& pack_name, std::string& error);
+// The upscaler model for the HD backgrounds comes with the app (the APK assets models/, see android/app/build.gradle).
+// Copies its files into `models` unless they are there already.
+bool install_models(const std::filesystem::path& models, std::string& error);
 
 }  // namespace dw3setup::android

@@ -32,7 +32,7 @@ bool WizardState::can_go_back() const {
     switch (step_) {
         case Step::ChooseDisc: return true;
         case Step::Verify: return check_done_;
-        case Step::HdOffer: return true;
+        case Step::HdOffer: return !hd_only_;
         default: return false;
     }
 }
@@ -67,6 +67,15 @@ void WizardState::resume_at_prepare(std::string verified_disc) {
     check_done_ = true;
     prepare_required_ = true;
     step_ = Step::PrepareWork;
+}
+
+void WizardState::resume_at_hd(std::string verified_disc) {
+    disc_path_ = std::move(verified_disc);
+    check_ = {};
+    check_.status = DiscStatus::Ok;
+    check_done_ = true;
+    hd_only_ = true;
+    step_ = Step::HdOffer;
 }
 
 void WizardState::fail_prepare(std::string message) {

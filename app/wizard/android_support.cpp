@@ -3,7 +3,6 @@
 #include <SDL3/SDL.h>
 #include <dlfcn.h>
 #include <unistd.h>
-#include <zstd.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -13,6 +12,7 @@
 #include <sstream>
 #include <thread>
 
+#include "assets.h"
 #include "disc_import.h"
 #include "dw3/platform.h"
 #include "zip_extract.h"
@@ -26,12 +26,7 @@ namespace {
 constexpr const char* kCompilerLibrary = "libzig.so";
 constexpr const char* kToolchainAsset = "toolchain.zip";
 constexpr const char* kToolchainStampAsset = "toolchain.stamp";
-constexpr const char* kBundleStampAsset = "bundle/stamp";
-constexpr const char* kBundleDiscAsset = "bundle/disc.bin.zst";
-constexpr const char* kBundleModuleAsset = "bundle/module.so";
-constexpr const char* kBundleModuleNameAsset = "bundle/module.name";
-constexpr const char* kBundlePackAsset = "bundle/hd-pack.zip";
-constexpr const char* kBundlePackStampAsset = "bundle/hd-pack.stamp";
+constexpr const char* kModelsAsset = "models/";
 
 std::string read_text(const fs::path& path) {
     std::ifstream in(path, std::ios::binary);
@@ -91,37 +86,6 @@ bool copy_stream(const std::string& source, const fs::path& target, const std::f
         if (done) done(n);
     }
     SDL_CloseIO(in);
-    return ok;
-}
-
-// Decompresses the zstd stream in `source` (an asset) into `target`.
-bool unpack_zstd(const char* source, const fs::path& target, std::string& error) {
-    SDL_IOStream* in = SDL_IOFromFile(source, "rb");
-    if (!in) {
-        error = std::string("Cannot open ") + source + ": " + SDL_GetError();
-        return false;
-    }
-    std::ofstream out(target, std::ios::binary | std::ios::trunc);
-    ZSTD_DStream* z = ZSTD_createDStream();
-    std::vector<char> in_buf(ZSTD_DStreamInSize()), out_buf(ZSTD_DStreamOutSize());
-    bool ok = out.good() && z;
-    std::size_t last = 0;
-    while (ok) {
-        const std::size_t n = SDL_ReadIO(in, in_buf.data(), in_buf.size());
-        if (n == 0) break;
-        ZSTD_inBuffer zin{in_buf.data(), n, 0};
-        while (ok && zin.pos < zin.size) {
-            ZSTD_outBuffer zout{out_buf.data(), out_buf.size(), 0};
-            last = ZSTD_decompressStream(z, &zout, &zin);
-            if (ZSTD_isError(last)) ok = false;
-            else out.write(out_buf.data(), static_cast<std::streamsize>(zout.pos));
-        }
-        ok = ok && out.good();
-    }
-    ok = ok && last == 0 && SDL_GetIOStatus(in) == SDL_IO_STATUS_EOF;
-    ZSTD_freeDStream(z);
-    SDL_CloseIO(in);
-    if (!ok) error = "Unpacking the disc failed (is the device full?).";
     return ok;
 }
 
@@ -230,58 +194,30 @@ std::optional<Toolchain> toolchain(const fs::path& user_data, std::string& error
     return t;
 }
 
-std::optional<std::string> install_bundle(const fs::path& user_data, std::string& error) {
-    std::string stamp;
-    if (!read_small(kBundleStampAsset, stamp)) return std::nullopt;
-    const fs::path dir = user_data / "bundle";
-    const fs::path cue = dir / "disc.cue";
-    if (read_text(dir / "stamp") == stamp) return utf8(cue);
-
+bool install_models(const fs::path& models, std::string& error) {
     std::error_code ec;
-    fs::remove_all(dir, ec);
-    fs::create_directories(dir, ec);
-    if (!unpack_zstd(kBundleDiscAsset, dir / "disc.bin", error)) {
-        fs::remove_all(dir, ec);
-        return std::nullopt;
-    }
-    std::ofstream(cue, std::ios::binary) << "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n";
-    // The prepared module, under the name this build looks for (a newer app version builds its own instead).
-    std::string name;
-    if (read_small(kBundleModuleNameAsset, name)) {
-        while (!name.empty() && (name.back() == '\n' || name.back() == '\r')) name.pop_back();
-        fs::create_directories(user_data / "module", ec);
-        const fs::path module = user_data / "module" / name;
-        const fs::path partial = module.string() + ".part";
-        if (!copy_stream(kBundleModuleAsset, partial, nullptr, error)) return std::nullopt;
-        fs::rename(partial, module, ec);
+    fs::create_directories(models, ec);
+    for (const char* ext : {".param", ".bin"}) {
+        const std::string name = std::string(kModelName) + ext;
+        const std::string asset = kModelsAsset + name;
+        SDL_IOStream* in = SDL_IOFromFile(asset.c_str(), "rb");
+        if (!in) {
+            error = "This build of the app has no upscaler model (" + name + ").";
+            return false;
+        }
+        const Sint64 size = SDL_GetIOSize(in);
+        SDL_CloseIO(in);
+        const fs::path target = models / name;
+        if (size >= 0 && fs::exists(target, ec) && fs::file_size(target, ec) == static_cast<uintmax_t>(size)) continue;
+        const fs::path partial = target.string() + ".part";
+        if (!copy_stream(asset, partial, nullptr, error)) return false;
+        fs::rename(partial, target, ec);
         if (ec) {
-            error = "Cannot store the prepared game in " + utf8(module.parent_path()) + ".";
-            return std::nullopt;
+            error = "Cannot store the upscaler model in " + utf8(models) + ".";
+            return false;
         }
     }
-    std::ofstream(dir / "stamp", std::ios::binary) << stamp;
-    return utf8(cue);
-}
-
-bool install_bundled_pack(const fs::path& user_data, const std::string& pack_name, std::string& error) {
-    std::string stamp;
-    if (!read_small(kBundlePackStampAsset, stamp)) return false;
-    const fs::path dir = user_data / "texture-packs" / pack_name;
-    if (read_text(dir / "bundle.stamp") == stamp) return false;
-
-    std::error_code ec;
-    fs::remove_all(dir, ec);
-    fs::create_directories(user_data, ec);
-    const fs::path zip = user_data / "hd-pack.zip.part";
-    bool ok = copy_stream(kBundlePackAsset, zip, nullptr, error) && extract_zip(zip, dir, error);
-    fs::remove(zip, ec);
-    if (ok) {
-        std::ofstream out(dir / "bundle.stamp", std::ios::binary);
-        ok = static_cast<bool>(out << stamp);
-        if (!ok) error = "Cannot store the HD backgrounds in " + utf8(dir) + ".";
-    }
-    if (!ok) fs::remove_all(dir, ec);
-    return ok;
+    return true;
 }
 
 bool import_disc(const std::vector<std::string>& sources, const fs::path& user_data, const std::function<void(double)>& progress,

@@ -23,7 +23,9 @@ struct PackJob {
     std::string model = "RealESRGAN_General_x4_v3";
     std::string gpu;
     int scale = 4, model_scale = 4, pad = 16;
+    int jpeg_quality = 0;  // see GenerateOptions
     CommandRunner run;
+    BatchUpscaler upscale;  // when set, used instead of running the upscaler program (see upscaler.h)
     std::function<void(const std::string&)> log;             // status lines
     std::function<void(std::size_t, std::size_t)> progress;  // images done / total
     std::function<bool()> cancelled;                         // polled between maps and batches; true stops the job

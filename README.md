@@ -40,8 +40,13 @@ Every option lives in an in-game settings screen, and in a plain `settings.toml`
    (SLUS-01436) and remembers it. Then it builds the game from your disc on your PC. That takes a minute or a few, it
    only happens once, and nothing gets downloaded for it. `--setup` opens the window again.
 3. Optional: say yes to HD backgrounds in the same window. It downloads an upscaler and a model, checks them against
-   fixed hashes, and builds a pack from your disc. That takes a long time and needs a Vulkan GPU, but you can cancel and
-   pick it up later.
+   fixed hashes, and builds a pack from your disc. That takes a long time (hours without a Vulkan GPU), but you can
+   cancel and pick it up later.
+
+On Android (arm64, Android 9 or later) the APK holds no game data either. On first launch you pick your `.cue` and
+`.bin` with the system file picker, they are copied into the app, and the game is built from them on the phone. HD
+backgrounds are made on the phone too, from the same disc, with the upscaler model that comes with the app. That takes a
+few hours (keep the phone charging), and stopping is fine: the next start continues where it left off.
 
 ## Technical
 
@@ -52,7 +57,7 @@ if the recompiler missed something. A missing function stops the game with a cle
 
 - Renderers: Metal, Vulkan and Direct3D 12 through [plume](https://github.com/renderbag/plume), plus a software
   rasterizer. All 3D and post-processing happens on the GPU.
-- Platforms: Linux x86-64 and arm64, macOS on Apple silicon, Windows x64.
+- Platforms: Linux x86-64 and arm64, macOS on Apple silicon, Windows x64, Android arm64.
 - Save states record where the game is in the original's addresses, so they don't depend on which build made them.
 - The generated C is architecture neutral, so one machine can produce it for the others.
 - Licensed GPL-3.0.

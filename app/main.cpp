@@ -368,27 +368,11 @@ int main(int argc, char** argv) {
     // audit runs, which must not wait for a person).
     auto disc_usable = [](const std::string& p) { return dw3setup::check_disc(dw3::platform::path_from_utf8(p)).ok(); };
 #if defined(DW3_ANDROID)
-    // A personal build that carries its owner's disc (and the game prepared from it) starts straight into the game.
-    if (opt.disc.empty()) {
-        std::string bundle_error;
-        if (auto bundled = dw3setup::android::install_bundle(dw3::platform::user_data_dir(), bundle_error)) opt.disc = *bundled;
-        else if (!bundle_error.empty()) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Digimon World 3", bundle_error.c_str(), nullptr);
-    }
-    // ... and may carry HD backgrounds made from that disc: switched on once, when they are first unpacked.
-    {
-        std::string pack_error;
-        if (dw3setup::android::install_bundled_pack(dw3::platform::user_data_dir(), dw3setup::kPackName, pack_error)) {
-            for (const auto& [id, value] : {std::pair<const char*, const char*>{"graphics.texture_pack", dw3setup::kPackName},
-                                            {"graphics.hd_backgrounds", "true"}})
-                for (dw3app::Settings* target : {&stored, &active}) {
-                    std::string err;
-                    if (!dw3app::set_text(*target, *dw3app::find_setting(id), value, err)) SDL_Log("settings: %s", err.c_str());
-                }
-            std::string err;
-            if (!config_file.empty() && !dw3app::save_settings_file(config_file, stored, err)) SDL_Log("settings: %s", err.c_str());
-        } else if (!pack_error.empty()) {
-            SDL_Log("HD backgrounds: %s", pack_error.c_str());
-        }
+    // Earlier personal builds unpacked their owner's disc here, and the setup was never asked for it: keep using it.
+    if (opt.disc.empty() && active.system.disc_path.empty()) {
+        const std::filesystem::path earlier = dw3::platform::user_data_dir() / "bundle" / "disc.cue";
+        std::error_code ec;
+        if (std::filesystem::exists(earlier, ec)) opt.disc = dw3::platform::path_to_utf8(earlier);
     }
 #endif
     std::optional<std::string> disc = dw3setup::locate_disc(opt.disc, active.system.disc_path, "game/Digimon World 3 (USA).cue", disc_usable);
@@ -455,7 +439,14 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "prepared %s\n", dw3::platform::path_to_utf8(result.module).c_str());
         return 0;
     }
-    if (opt.setup || !disc || prepare) {
+    // HD backgrounds that were asked for (in the setup, or by turning them on in the settings) but are not built yet: the
+    // setup opens for them alone. Phones have no --setup, and building them takes hours and may be stopped.
+    bool hd_only = false;
+#if defined(DW3_ANDROID)
+    hd_only = disc && !prepare && !opt.setup && opt.max_frames < 0 && active.graphics.hd_backgrounds &&
+              !dw3setup::hd_pack_complete(dw3::platform::user_data_dir());
+#endif
+    if (opt.setup || !disc || prepare || hd_only) {
         if (opt.max_frames >= 0) {
             std::fprintf(stderr, "%s\n", prepare ? "the game is not prepared: run once without --frames, or with --prepare, to build it from the disc"
                                                 : "no disc image: pass --disc PATH, or run without --frames to open the setup");
@@ -467,8 +458,9 @@ int main(int argc, char** argv) {
         launch.prepare = prepare;
         if (launch.prepare) launch.prepare->disc_verified = disc.has_value() && !opt.setup;
         launch.screenshot_dir = opt.setup_shots;
+        launch.hd_only = hd_only;
         const dw3setup::WizardOutcome outcome = dw3setup::run_setup_wizard(launch);
-        if (!outcome.completed) return opt.setup ? 0 : 1;
+        if (!outcome.completed) return opt.setup || hd_only ? 0 : 1;
         auto store = [&](const char* id, const std::string& value) {
             for (dw3app::Settings* target : {&stored, &active}) {
                 std::string err;
@@ -479,6 +471,8 @@ int main(int argc, char** argv) {
         if (outcome.hd_backgrounds) {
             store("graphics.texture_pack", dw3setup::kPackName);
             store("graphics.hd_backgrounds", "true");
+        } else if (hd_only) {
+            store("graphics.hd_backgrounds", "false");  // "Not now": not offered again until they are turned on again
         }
         if (!config_file.empty()) {
             std::string err;

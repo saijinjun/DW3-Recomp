@@ -277,10 +277,19 @@ TEST(Assets, PlanListsUpscalerThenModels) {
     EXPECT_TRUE(plan.assets[0].is_archive);
     EXPECT_EQ(plan.assets[1].file_name, std::string(kModelName) + ".param");
     EXPECT_EQ(plan.assets[2].file_name, std::string(kModelName) + ".bin");
-    EXPECT_TRUE(plan.unsupported.empty());
+    EXPECT_FALSE(plan.builtin);
+}
+
+TEST(Assets, WithoutAnUpscalerBuildOnlyTheModelsAreDownloaded) {
+    // No realesrgan-ncnn-vulkan for Linux on Arm: the built-in upscaler runs the same model.
     const DownloadPlan arm = plan_for(dw3::platform::Os::Linux, dw3::platform::Arch::Arm64);
-    EXPECT_FALSE(arm.unsupported.empty());
-    EXPECT_FALSE(plan_problem(arm).empty());
+    EXPECT_TRUE(arm.builtin);
+    ASSERT_EQ(arm.assets.size(), 2u);
+    EXPECT_EQ(arm.assets[0].file_name, std::string(kModelName) + ".param");
+    EXPECT_EQ(plan_problem(arm), "");
+    bool all_known = false;
+    EXPECT_GT(total_download_bytes(arm, all_known), 2000000u);
+    EXPECT_TRUE(all_known);
 }
 
 TEST(Assets, UnsetValuesFailClearly) {
@@ -301,8 +310,8 @@ TEST(Assets, UnsetValuesFailClearly) {
 TEST(Assets, SizesAndPaths) {
     DownloadPlan plan = plan_for(dw3::platform::Os::Windows, dw3::platform::Arch::X86_64);
     bool known = true;
-    EXPECT_EQ(total_download_bytes(plan, known), plan.assets[0].size_bytes);
-    EXPECT_FALSE(known);  // the model files have no recorded size yet
+    EXPECT_EQ(total_download_bytes(plan, known), plan.assets[0].size_bytes + plan.assets[1].size_bytes + plan.assets[2].size_bytes);
+    EXPECT_TRUE(known);
     EXPECT_EQ(format_bytes(3 * 1024 * 1024 / 2), "1.5 MB");
     EXPECT_EQ(format_bytes(100), "1 KB");
     const fs::path data = "data";
@@ -613,6 +622,25 @@ TEST(HdInstall, DownloadsVerifiesUnpacksAndGenerates) {
     EXPECT_EQ(installer.snapshot().phase, HdPhase::Generating);
 }
 
+TEST(HdInstall, BuiltinUpscalerNeedsOnlyTheModels) {
+    InstallFixture f;
+    f.config.plan.assets.erase(f.config.plan.assets.begin());
+    f.config.plan.builtin = true;
+    fs::path given = "unset";
+    f.config.generate = [&](const fs::path& upscaler, const fs::path& models, const fs::path&,
+                            const std::function<void(std::size_t, std::size_t)>&, const std::atomic<bool>&, std::string&) {
+        given = upscaler;
+        EXPECT_TRUE(fs::exists(models / "m.bin"));
+        return true;
+    };
+    HdInstaller installer(f.config);
+    const HdResult r = installer.run();
+    ASSERT_TRUE(r.ok) << r.error;
+    EXPECT_EQ(f.system.downloads, 2);
+    EXPECT_TRUE(given.empty());
+    EXPECT_FALSE(fs::exists(f.config.user_data / "tools" / "realesrgan-ncnn-vulkan"));
+}
+
 TEST(HdInstall, WrongHashFailsAndDeletesFile) {
     InstallFixture f;
     f.system.files["https://example.test/m.bin"] = "tampered";
@@ -722,6 +750,22 @@ TEST(WizardState, ResumeAtPrepareSkipsTheDiscSteps) {
     w.finish_prepare();
     EXPECT_EQ(w.step(), Step::HdOffer);
     EXPECT_TRUE(w.can_go_back());
+}
+
+TEST(WizardState, ResumeAtHdOffersOnlyTheBackgrounds) {
+    WizardState w;
+    w.resume_at_hd("game.cue");
+    EXPECT_EQ(w.step(), Step::HdOffer);
+    EXPECT_TRUE(w.hd_only());
+    EXPECT_FALSE(w.can_go_back());
+    w.back();
+    EXPECT_EQ(w.step(), Step::HdOffer);
+    w.skip_hd();
+    EXPECT_EQ(w.step(), Step::Done);
+    w.press_finish();
+    EXPECT_TRUE(w.outcome().completed);
+    EXPECT_FALSE(w.outcome().hd_backgrounds);
+    EXPECT_EQ(w.outcome().disc_path, "game.cue");
 }
 
 TEST(WizardState, NoPrepareStepWhenNotRequired) {

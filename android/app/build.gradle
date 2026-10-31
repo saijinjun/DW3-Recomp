@@ -1,10 +1,15 @@
 // The Android app: SDL's Java activity around libmain.so (the program, built from the top-level CMakeLists.txt), the zig
-// compiler as libzig.so (installed as a native library so that it may be run) and the rest of the toolchain the setup
-// builds the game module with, as the asset toolchain.zip. Build with
+// compiler as libzig.so (installed as a native library so that it may be run), the rest of the toolchain the setup
+// builds the game module with, as the asset toolchain.zip, and the upscaler model for the HD backgrounds (Real-ESRGAN,
+// BSD 3-Clause; downloaded at build time and checked against its SHA-256). Build with
 //   gradle assembleRelease   (Gradle 8.12 or later) -PzigDir=<unpacked zig-aarch64-linux distribution>
-// The APK holds no game data: the player picks their own disc image on first start. A personal build for one player
-// may carry that player's disc and the module prepared from it: -PbundleDir=<dir with disc.bin.zst, module.so,
-// module.name and stamp, optionally hd-pack.zip and hd-pack.stamp> (see app/wizard/android_support.h). Never publish such an APK.
+// The APK holds no game data: the player picks their own disc image on first start, and the game and the HD
+// backgrounds are made from it on the phone.
+//
+// Signing: -PkeystoreFile=<file> -PkeystorePassword=<password> [-PkeyAlias=<alias>] (or the environment variables
+// DW3_KEYSTORE, DW3_KEYSTORE_PASSWORD, DW3_KEY_ALIAS). Keep one key for every release, so that a newer build installs
+// over an older one and keeps its saves; the key is never part of this repository. Without one, the release build is
+// signed with the local debug key, which only suits testing.
 
 import java.security.MessageDigest
 
@@ -14,8 +19,18 @@ plugins {
 
 def repoRoot = file('../..')
 def zigDir = project.findProperty('zigDir')
-def bundleDir = project.findProperty('bundleDir')
 def generatedDir = layout.buildDirectory.dir('generated/toolchain')
+def signingFile = project.findProperty('keystoreFile') ?: System.getenv('DW3_KEYSTORE')
+def signingPassword = project.findProperty('keystorePassword') ?: System.getenv('DW3_KEYSTORE_PASSWORD')
+def signingAlias = project.findProperty('keyAlias') ?: System.getenv('DW3_KEY_ALIAS') ?: 'dw3recomp'
+
+// The model the HD background step runs (app/wizard/assets.cpp names the same files and hashes).
+def modelBase = 'https://github.com/MikeRavenelle/DigimonWorld3-Recomp/releases/download/models-v1/'
+def modelFiles = [
+    'RealESRGAN_General_x4_v3.param': '8a0c4b4fd1c57c945ef24477edbdbeba8a509ca9c9adf8f63f51c265ea1bcc89',
+    'RealESRGAN_General_x4_v3.bin'  : '8fdd6052f8931091164a570ee7b5c5b2d1dcd991112d464eb9ae1a5b52ece553',
+]
+def modelCache = layout.buildDirectory.dir('model-download')
 
 android {
     namespace = 'com.dw3recomp'
@@ -40,22 +55,23 @@ android {
         }
     }
 
-    // One fixed key, so that a newer build installs over an older one and keeps its saves. Personal builds only.
     signingConfigs {
-        personal {
-            storeFile file('dw3recomp.keystore')
-            storePassword 'dw3recomp'
-            keyAlias 'dw3recomp'
-            keyPassword 'dw3recomp'
+        if (signingFile) {
+            release {
+                storeFile file(signingFile)
+                storePassword signingPassword
+                keyAlias signingAlias
+                keyPassword signingPassword
+            }
         }
     }
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.personal
+            signingConfig signingFile ? signingConfigs.release : signingConfigs.debug
         }
         debug {
-            signingConfig signingConfigs.personal
+            if (signingFile) signingConfig signingConfigs.release
         }
     }
 
@@ -79,7 +95,7 @@ android {
         }
     }
     androidResources {
-        noCompress += ['zip', 'zst']
+        noCompress += ['zip']
     }
     lint {
         abortOnError = false
@@ -88,9 +104,40 @@ android {
 
 // The toolchain: the compiler, zig's compiler headers (the module is freestanding: no libc is linked), the header the
 // recompiled code includes and the module's entry point and string functions. The stamp tells the app to unpack a new copy.
+// Also the upscaler model, as the assets models/<name>.
+def sha256Of = { File f ->
+    def digest = MessageDigest.getInstance('SHA-256')
+    f.withInputStream { s ->
+        byte[] buffer = new byte[1 << 16]
+        int n
+        while ((n = s.read(buffer)) > 0) digest.update(buffer, 0, n)
+    }
+    digest.digest().encodeHex().toString()
+}
+
+tasks.register('dw3Models') {
+    inputs.property('models', modelFiles)
+    outputs.dir(modelCache)
+    doLast {
+        def dir = modelCache.get().asFile
+        dir.mkdirs()
+        modelFiles.each { name, sha ->
+            def file = new File(dir, name)
+            if (file.exists() && sha256Of(file) == sha) return
+            new URL(modelBase + name).withInputStream { i -> file.withOutputStream { o -> o << i } }
+            def got = sha256Of(file)
+            if (got != sha) {
+                file.delete()
+                throw new GradleException("${name}: SHA-256 ${got}, expected ${sha}")
+            }
+        }
+    }
+}
+
 tasks.register('dw3Toolchain') {
+    dependsOn 'dw3Models'
     inputs.property('zigDir', zigDir ?: '')
-    inputs.property('bundleDir', bundleDir ?: '')
+    inputs.dir(modelCache)
     inputs.files(fileTree(repoRoot) { include 'runtime/include/dw3/recomp.h', 'runtime/module/*.c' })
     outputs.dir(generatedDir)
     doLast {
@@ -114,19 +161,10 @@ tasks.register('dw3Toolchain') {
             zipfileset(file: new File(repoRoot, 'runtime/include/dw3/recomp.h'), fullpath: 'include/dw3/recomp.h')
             zipfileset(dir: new File(repoRoot, 'runtime/module'), includes: '*.c', prefix: 'module')
         }
-        def digest = MessageDigest.getInstance('SHA-256')
-        zip.withInputStream { s ->
-            byte[] buffer = new byte[1 << 16]
-            int n
-            while ((n = s.read(buffer)) > 0) digest.update(buffer, 0, n)
-        }
-        new File(assets, 'toolchain.stamp').text = digest.digest().encodeHex().toString()
-        if (bundleDir) {
-            project.copy {
-                from file(bundleDir)
-                include 'disc.bin.zst', 'module.so', 'module.name', 'stamp', 'hd-pack.zip', 'hd-pack.stamp'
-                into new File(assets, 'bundle')
-            }
+        new File(assets, 'toolchain.stamp').text = sha256Of(zip)
+        project.copy {
+            from modelCache
+            into new File(assets, 'models')
         }
     }
 }

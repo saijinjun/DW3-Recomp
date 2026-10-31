@@ -144,13 +144,18 @@ started from.
 
 The field backgrounds are pre-rendered pictures that the console stores as small 256-colour images. HD BG replaces
 them with sharper versions from a texture pack while everything else (characters, menus, 3D) is drawn as usual.
-The game does not come with such a pack: you make one on your own computer from your own disc, using an AI upscaler.
+The game does not come with such a pack: you make one on your own computer or phone from your own disc, using an AI
+upscaler.
 Packs need the GPU renderer; with the software renderer the option is ignored. Best results need an internal
 resolution equal to the pack's scale (4x for the default pack); other values work but resample the pack.
 
 The first-run setup (`dw3recomp --setup`) can do all of this for you: on "Accept" it downloads the upscaler and the model
 into `<user data dir>/tools` (checked by SHA-256, with the system `curl`), builds a pack named `disc-hd` from the disc,
-and sets `graphics.hd_backgrounds` and `graphics.texture_pack`. The steps below are the manual route.
+and sets `graphics.hd_backgrounds` and `graphics.texture_pack`. Where there is no build of the upscaler program (Linux on
+Arm, and phones, which may not start downloaded programs) the program's own CPU upscaler runs the same model; that takes
+a few hours for a whole disc. On Android the model comes with the app, nothing is downloaded, and the pack is made at
+2x as JPEG (about 400 MB); the setup offers it after the disc is imported, and again at the next start whenever HD BG is
+on and the pack is not finished, continuing where the last run stopped. The steps below are the manual route.
 
 Seamless backgrounds (`graphics.seamless_bg`, "Seamless BG" in the settings screen, GPU renderer only) remove the blocks
 that pop in at the edges of a field map while it scrolls. The game keeps only a dozen map cells in memory and covers the
@@ -170,9 +175,9 @@ Making a pack:
    any model in that program's format; `RealESRGAN_General_x4_v3` gave the best results of the ones we tried. Put the
    program and its `models` folder in `<user data dir>/tools`, or give their locations on the command line. The game
    and the pack tool never download anything by themselves.
-   Without a Vulkan GPU, `tools/models/realesrgan_cpu.py` (Python 3 with numpy and Pillow) runs the same compact models
-   on the processor from the same model files: pass `--upscaler tools/models/realesrgan_cpu.py`. It is much slower
-   (a whole disc at `--scale 2` takes a couple of hours on four cores).
+   Without a Vulkan GPU, `--upscaler builtin` runs the same compact models on the processor from the same model files
+   (`--threads N`, default one per core). It is much slower: a whole disc at `--scale 2` takes a couple of hours on
+   four cores. `tools/models/realesrgan_cpu.py` (Python 3 with numpy and Pillow) is the reference it follows.
 2. Play the areas you want improved with `--dump-textures <folder>`, for example
    `dw3recomp --dump-textures dump-town`. Every background image that is drawn for a while is recorded; leaving the
    game writes the folder. Use one folder per session; the pack tool takes several. Walk around to scroll through
@@ -180,7 +185,8 @@ Making a pack:
 3. Build the pack:
    `texpack generate --dump dump-town --dump dump-inn --out "<user data dir>/texture-packs/general-x4" --name general-x4`
    Options: `--upscaler`, `--models`, `--model` (default `RealESRGAN_General_x4_v3`), `--scale 2|4` (default 4),
-   `--gpu N` (if the upscaler picks a software device), `--pad`, `--work`. Running it again with more dumps adds to the
+   `--gpu N` (if the upscaler picks a software device), `--pad`, `--work`, `--jpeg 95` (store the images as JPEG, a
+   quarter of the size). Running it again with more dumps adds to the
    pack and leaves finished images alone. Each background image is upscaled together with the pixels around it, taken
    from the neighbouring images seen in the dump, so the borders between images line up.
 4. Switch HD BG on in the settings screen (or `--hd-backgrounds`, or use the Remaster preset). With

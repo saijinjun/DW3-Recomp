@@ -54,6 +54,8 @@ bool read_png(const std::filesystem::path& path, Image& out, std::string& error)
 bool decode_png(const uint8_t* data, std::size_t size, Image& out, std::string& error);
 // Writes RGBA, or RGB (alpha dropped) with `with_alpha` false.
 bool write_png(const std::filesystem::path& path, const Image& img, std::string& error, bool with_alpha = true);
+// Writes RGB (alpha dropped) as JPEG of `quality` 1..100.
+bool write_jpeg(const std::filesystem::path& path, const Image& img, int quality, std::string& error);
 
 class TexturePack {
 public:

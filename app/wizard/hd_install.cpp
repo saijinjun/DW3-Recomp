@@ -108,6 +108,7 @@ HdResult HdInstaller::unpack_all() {
             if (ec) return fail("Cannot install " + asset.file_name + ": " + ec.message());
         }
     }
+    if (config_.plan.builtin) return {true, {}, false};
     const fs::path exe = upscaler_executable(config_.user_data, config_.os);
     if (!fs::exists(exe)) return fail("The upscaler archive did not contain " + exe.filename().string() + ".");
     fs::permissions(exe, fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec, fs::perm_options::add, ec);
@@ -130,7 +131,8 @@ HdResult HdInstaller::run() {
         set_status(HdPhase::Generating, "Upscaling backgrounds: " + std::to_string(done) + " of " + std::to_string(total),
                    total ? static_cast<double>(done) / static_cast<double>(total) : -1.0);
     };
-    if (!config_.generate(upscaler_executable(config_.user_data, config_.os), models_dir(config_.user_data),
+    const fs::path upscaler = config_.plan.builtin ? fs::path() : upscaler_executable(config_.user_data, config_.os);
+    if (!config_.generate(upscaler, models_dir(config_.user_data),
                           texture_pack_dir(config_.user_data, kPackName), progress, cancel_, error))
         return fail(cancel_ ? "Cancelled." : error);
     return {true, {}, false};

@@ -1,5 +1,6 @@
-// The optional HD background step end to end: download the upscaler and model files with curl, verify their SHA-256,
-// unpack them under <user data>/tools, then build the texture pack from the disc. Processes and the pack generator are
+// The optional HD background step end to end: download the upscaler and model files with curl (only the model files when
+// the built-in upscaler is used, and nothing on Android, where they come with the app), verify their SHA-256, unpack
+// them under <user data>/tools, then build the texture pack from the disc. Processes and the pack generator are
 // injected so that the sequence can be tested; run() blocks and is meant for a worker thread.
 #pragma once
 #include <atomic>
@@ -23,6 +24,7 @@ struct HdConfig {
     // Runs a program and returns its exit code (see process_runner.h for the negative codes).
     std::function<int(const std::vector<std::string>&, const std::atomic<bool>& cancel)> run;
     // Builds the texture pack from the disc; reports (done, total) images. Returns false with an error, also on cancel.
+    // `upscaler` is empty when the plan uses the built-in one.
     std::function<bool(const std::filesystem::path& upscaler, const std::filesystem::path& models, const std::filesystem::path& pack_dir,
                        const std::function<void(std::size_t, std::size_t)>& progress, const std::atomic<bool>& cancel, std::string& error)>
         generate;

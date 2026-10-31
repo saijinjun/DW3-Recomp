@@ -47,33 +47,33 @@ std::vector<Asset> model_assets() {
     param.file_name = std::string(kModelName) + ".param";
     param.url = std::string(kModelReleaseUrl) + param.file_name;
     param.sha256 = kModelParamSha256;
+    param.size_bytes = 6326;
     Asset bin = param;
     bin.file_name = std::string(kModelName) + ".bin";
     bin.url = std::string(kModelReleaseUrl) + bin.file_name;
     bin.sha256 = kModelBinSha256;
+    bin.size_bytes = 2435272;
     return {param, bin};
 }
 
 DownloadPlan plan_for(Os os, Arch arch) {
     DownloadPlan plan;
 #if defined(DW3_ANDROID)
-    // The upscaler is a desktop program. A phone can use a texture pack made on a computer.
-    const std::optional<Asset> up;
     (void)os;
     (void)arch;
+    plan.builtin = true;
 #else
     const std::optional<Asset> up = upscaler_asset(os, arch);
-#endif
     if (up) plan.assets.push_back(*up);
-    else plan.unsupported = "There is no build of the upscaler for this platform.";
+    else plan.builtin = true;
     for (const Asset& m : model_assets()) plan.assets.push_back(m);
+#endif
     return plan;
 }
 
 bool is_placeholder_url(const std::string& url) { return url.find("PLACEHOLDER") != std::string::npos || url.find(".invalid/") != std::string::npos; }
 
 std::string plan_problem(const DownloadPlan& plan) {
-    if (!plan.unsupported.empty()) return plan.unsupported;
     for (const Asset& a : plan.assets) {
         if (is_placeholder_url(a.url)) return a.file_name + ": the download address has not been set in this build.";
         if (a.sha256.size() != 64) return a.file_name + ": the expected SHA-256 has not been set in this build, so it cannot be verified.";
@@ -103,6 +103,14 @@ std::filesystem::path models_dir(const std::filesystem::path& user_data) { retur
 std::filesystem::path downloads_dir(const std::filesystem::path& user_data) { return user_data / "downloads"; }
 std::filesystem::path texture_pack_dir(const std::filesystem::path& user_data, const std::string& pack_name) {
     return user_data / "texture-packs" / pack_name;
+}
+std::filesystem::path pack_unfinished_marker(const std::filesystem::path& user_data) {
+    return texture_pack_dir(user_data, kPackName) / "unfinished";
+}
+bool hd_pack_complete(const std::filesystem::path& user_data) {
+    std::error_code ec;
+    return std::filesystem::exists(texture_pack_dir(user_data, kPackName) / "manifest.toml", ec) &&
+           !std::filesystem::exists(pack_unfinished_marker(user_data), ec);
 }
 std::filesystem::path upscaler_executable(const std::filesystem::path& user_data, Os os) {
     return tools_dir(user_data) / (os == Os::Windows ? "realesrgan-ncnn-vulkan.exe" : "realesrgan-ncnn-vulkan");

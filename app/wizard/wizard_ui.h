@@ -24,6 +24,7 @@ struct WizardLaunch {
     std::filesystem::path user_data;   // where tools, downloads and texture packs go
     std::optional<PrepareSetup> prepare;
     std::string screenshot_dir;        // development aid: walk through the steps unattended, saving a picture of each
+    bool hd_only = false;              // the game is set up (initial_disc is verified): offer only the HD backgrounds
 };
 
 // Blocks until the player finishes or closes the window. outcome.completed is false if the window was closed early or
