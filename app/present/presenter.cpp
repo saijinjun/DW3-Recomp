@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <vector>
 
 #include "hw_presenter.h"
@@ -14,11 +15,23 @@ void Presenter::notify(std::string text) { osd_.show(std::move(text), SDL_GetTic
 
 void Presenter::set_status(std::string text) { osd_.set_status(std::move(text)); }
 
-void Presenter::set_panel(const OsdImage* image, int x, int y, uint64_t serial) {
-    panel_ = image && image->w > 0 && image->h > 0 ? image : nullptr;
-    panel_x_ = x;
-    panel_y_ = y;
-    panel_serial_ = panel_ ? serial : 0;
+void Presenter::set_panel(int slot, const OsdImage* image, int x, int y, uint64_t serial) {
+    if (slot < 0 || slot >= kPanelSlots) return;
+    Panel& p = panels_[slot];
+    p.image = image && image->w > 0 && image->h > 0 ? image : nullptr;
+    p.x = x;
+    p.y = y;
+    p.serial = p.image ? serial : 0;
+}
+
+uint64_t Presenter::panels_key() const {
+    // Changes whenever any panel's pixels, position or presence do.
+    uint64_t key = 0xcbf29ce484222325ull;
+    for (const Panel& p : panels_)
+        for (const uint64_t v : {p.image ? p.serial + 1 : uint64_t{0}, static_cast<uint64_t>(static_cast<uint32_t>(p.x)),
+                                 static_cast<uint64_t>(static_cast<uint32_t>(p.y))})
+            key = (key ^ v) * 0x100000001b3ull;
+    return key;
 }
 
 namespace {
@@ -60,8 +73,39 @@ bool Presenter::overlay_frame(int ww, int wh, OverlayFrame& out) {
             out = {note->rgba.data(), note->w, note->h, osd_.x(ww), osd_.margin(), 0, 0, osd_.serial(), opacity};
             return true;
         }
-        if (!panel_) return false;
-        out = {panel_->rgba.data(), panel_->w, panel_->h, panel_x_, panel_y_, 0, 0, panel_serial_ | (1ull << 62), 1.0f};
+        const Panel* only = nullptr;
+        int shown = 0;
+        for (const Panel& p : panels_)
+            if (p.image) {
+                only = &p;
+                ++shown;
+            }
+        if (shown == 0) return false;
+        if (shown == 1) {
+            out = {only->image->rgba.data(), only->image->w, only->image->h, only->x, only->y, 0, 0, only->serial | (1ull << 62), 1.0f};
+            return true;
+        }
+        if (const uint64_t key = panels_key(); key != panels_image_key_) {
+            int x0 = 1 << 30, y0 = 1 << 30, x1 = -(1 << 30), y1 = -(1 << 30);
+            for (const Panel& p : panels_)
+                if (p.image) {
+                    x0 = std::min(x0, p.x);
+                    y0 = std::min(y0, p.y);
+                    x1 = std::max(x1, p.x + p.image->w);
+                    y1 = std::max(y1, p.y + p.image->h);
+                }
+            panels_image_.w = x1 - x0;
+            panels_image_.h = y1 - y0;
+            panels_image_.rgba.assign(static_cast<std::size_t>(panels_image_.w) * static_cast<std::size_t>(panels_image_.h), 0u);
+            for (const Panel& p : panels_)
+                if (p.image) blend_into(panels_image_, *p.image, p.x - x0, p.y - y0, 1);
+            panels_image_x_ = x0;
+            panels_image_y_ = y0;
+            panels_image_key_ = key;
+            ++panels_image_serial_;
+        }
+        out = {panels_image_.rgba.data(), panels_image_.w, panels_image_.h, panels_image_x_, panels_image_y_, 0, 0,
+               panels_image_serial_ | (3ull << 61), 1.0f};
         return true;
     }
     // The controls cover the window; the notification is copied into them (at full strength: a fade would mean
@@ -73,11 +117,12 @@ bool Presenter::overlay_frame(int ww, int wh, OverlayFrame& out) {
     const int cw = controls.w, ch = controls.h;
     const uint64_t osd_key = note ? osd_.serial() : ~1ull;
     const int osd_x = note ? osd_.x(ww) : -1;
-    const uint64_t panel_key = panel_ ? panel_serial_ : ~1ull;
+    const uint64_t panel_key = panels_key();
     if (touch_->serial() != composite_touch_ || osd_key != composite_osd_ || osd_x != composite_osd_x_ || composite_.w != cw ||
         composite_.h != ch || panel_key != composite_panel_) {
         composite_ = controls;
-        if (panel_) blend_into(composite_, *panel_, panel_x_ / downscale, panel_y_ / downscale, downscale);
+        for (const Panel& p : panels_)
+            if (p.image) blend_into(composite_, *p.image, p.x / downscale, p.y / downscale, downscale);
         if (note) {
             // Nearest-neighbour into the (possibly smaller) controls image.
             const int x0 = osd_x / downscale, y0 = osd_.margin() / downscale;

@@ -4,6 +4,8 @@
 #include <chrono>
 #include <cmath>
 
+#include "hud_art.h"
+
 namespace dw3app {
 
 namespace {
@@ -12,7 +14,6 @@ using dw3::texrep::Image;
 using dw3::texrep::StageLibrary;
 
 constexpr uint32_t kPanel = 0xC0201810u;   // translucent dark blue-grey, like the notifications
-constexpr uint32_t kEdge = 0xD0F0E0D0u;
 constexpr uint32_t kView = 0xF0FFFFFFu;
 constexpr uint32_t kDot = 0xFF2850F0u;     // red-orange
 constexpr uint32_t kDotRing = 0xFFFFFFFFu;
@@ -92,19 +93,27 @@ Minimap::Base Minimap::build(StageLibrary& library, int map, int size) {
             }
     if (x1 < x0 || y1 < y0) return out;
     const int cw = x1 - x0 + 1, ch = y1 - y0 + 1;
-    const int border = std::max(2, size / 40);
-    const int inner = std::max(8, size - 2 * border);
-    const float scale = std::min(1.0f, static_cast<float>(inner) / static_cast<float>(std::max(cw, ch)));
+    // The frame art drawn so its left side is 7% of `size` thick; the map fills its opening.
+    const float f = static_cast<float>(size) * 0.07f / static_cast<float>(hud_art::kMinimapFrameLeft);
+    const auto frame_px = [f](int art_px) { return std::max(1, static_cast<int>(std::lround(static_cast<float>(art_px) * f))); };
+    out.left = frame_px(hud_art::kMinimapFrameLeft);
+    out.top = frame_px(hud_art::kMinimapFrameTop);
+    out.right = frame_px(hud_art::kMinimapFrameRight);
+    out.bottom = frame_px(hud_art::kMinimapFrameBottom);
+    const int inner_w = std::max(8, size - out.left - out.right), inner_h = std::max(8, size - out.top - out.bottom);
+    const float scale = std::min({1.0f, static_cast<float>(inner_w) / static_cast<float>(cw), static_cast<float>(inner_h) / static_cast<float>(ch)});
     const int mw = std::max(1, static_cast<int>(std::lround(static_cast<float>(cw) * scale)));
     const int mh = std::max(1, static_cast<int>(std::lround(static_cast<float>(ch) * scale)));
     out.crop_x = x0;
     out.crop_y = y0;
     out.scale = scale;
-    out.border = border;
     OsdImage& base = out.image;
-    base.w = mw + 2 * border;
-    base.h = mh + 2 * border;
-    base.rgba.assign(static_cast<std::size_t>(base.w) * static_cast<std::size_t>(base.h), kPanel);
+    base.w = mw + out.left + out.right;
+    base.h = mh + out.top + out.bottom;
+    base.rgba.assign(static_cast<std::size_t>(base.w) * static_cast<std::size_t>(base.h), 0u);
+    // The panel colour behind the map reaches under the frame's inner edge, not out to its cut corners.
+    for (int y = out.top / 2; y < base.h - out.bottom / 2; ++y)
+        for (int x = out.left / 2; x < base.w - out.right / 2; ++x) put(base, x, y, kPanel);
     // Area average of the map pixels that fall in each panel pixel (transparent ones count as the panel colour).
     for (int py = 0; py < mh; ++py) {
         const int sy0 = y0 + static_cast<int>(static_cast<float>(py) / scale);
@@ -124,10 +133,11 @@ Minimap::Base Minimap::build(StageLibrary& library, int map, int size) {
                     b += (c >> 16) & 0xFF;
                 }
             if (opaque * 2 < n) continue;
-            put(base, border + px, border + py, 0xFF000000u | (r / opaque) | ((g / opaque) << 8) | ((b / opaque) << 16));
+            put(base, out.left + px, out.top + py, 0xFF000000u | (r / opaque) | ((g / opaque) << 8) | ((b / opaque) << 16));
         }
     }
-    outline(base, 0, 0, base.w - 1, base.h - 1, std::max(1, border / 2), kEdge);
+    hud_art::blit_nine(base.rgba.data(), base.w, base.h, hud_art::minimap_frame(), hud_art::kMinimapFrameCorner, 0, 0, base.w, base.h,
+                       frame_px(hud_art::kMinimapFrameCorner));
     out.ok = true;
     return out;
 }
@@ -157,21 +167,28 @@ const OsdImage* Minimap::frame(StageLibrary& library, int map, int scroll_x, int
     drawn_px_ = party_x;
     drawn_py_ = party_y;
     image_ = base_.image;
-    const int border = base_.border;
-    const auto to_x = [&](int mx) { return border + static_cast<int>(std::lround(static_cast<float>(mx - base_.crop_x) * base_.scale)); };
-    const auto to_y = [&](int my) { return border + static_cast<int>(std::lround(static_cast<float>(my - base_.crop_y) * base_.scale)); };
-    const int vx0 = std::clamp(to_x(scroll_x), border, image_.w - border - 1);
-    const int vy0 = std::clamp(to_y(scroll_y), border, image_.h - border - 1);
-    const int vx1 = std::clamp(to_x(scroll_x + view_w) - 1, vx0, image_.w - border - 1);
-    const int vy1 = std::clamp(to_y(scroll_y + view_h) - 1, vy0, image_.h - border - 1);
+    const auto to_x = [&](int mx) { return map_x(mx); };
+    const auto to_y = [&](int my) { return map_y(my); };
+    const int x_max = image_.w - base_.right - 1, y_max = image_.h - base_.bottom - 1;
+    const int vx0 = std::clamp(to_x(scroll_x), base_.left, x_max);
+    const int vy0 = std::clamp(to_y(scroll_y), base_.top, y_max);
+    const int vx1 = std::clamp(to_x(scroll_x + view_w) - 1, vx0, x_max);
+    const int vy1 = std::clamp(to_y(scroll_y + view_h) - 1, vy0, y_max);
     outline(image_, vx0, vy0, vx1, vy1, 1, kView);
     const float r = std::max(2.5f, static_cast<float>(size_) / 45.0f);
-    const float cx = static_cast<float>(std::clamp(to_x(party_x), border, image_.w - border - 1));
-    const float cy = static_cast<float>(std::clamp(to_y(party_y), border, image_.h - border - 1));
+    const float cx = static_cast<float>(std::clamp(to_x(party_x), base_.left, x_max));
+    const float cy = static_cast<float>(std::clamp(to_y(party_y), base_.top, y_max));
     disc(image_, cx, cy, r + 1.0f, kDotRing);
     disc(image_, cx, cy, r, kDot);
     ++serial_;
     return &image_;
+}
+
+int Minimap::map_x(int mx) const {
+    return base_.left + static_cast<int>(std::lround(static_cast<float>(mx - base_.crop_x) * base_.scale));
+}
+int Minimap::map_y(int my) const {
+    return base_.top + static_cast<int>(std::lround(static_cast<float>(my - base_.crop_y) * base_.scale));
 }
 
 }  // namespace dw3app

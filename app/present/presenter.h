@@ -80,9 +80,11 @@ public:
     void set_status(std::string text);
     // On-screen touch controls to draw under the notifications (null: none). Not part of captures.
     void set_touch_controls(TouchControls* touch) { touch_ = touch; }
-    // A picture kept on screen at window position (x, y), such as the minimap; null removes it. `serial` changes
-    // whenever its pixels do. The image must stay valid until it is replaced. Not part of captures.
-    void set_panel(const OsdImage* image, int x, int y, uint64_t serial);
+    // Pictures kept on screen at window position (x, y), such as the minimap (slot 0), the party HUD or the battle party cards (slot 1) and the enemy bars (slot 2); null
+    // removes one. `serial` changes whenever its pixels do. The image must stay valid until it is replaced. Not part
+    // of captures.
+    static constexpr int kPanelSlots = 3;
+    void set_panel(int slot, const OsdImage* image, int x, int y, uint64_t serial);
 
 protected:
     // What to blend over the window this frame: the notification alone, or the touch controls with the notification
@@ -102,9 +104,17 @@ protected:
 private:
     OsdImage composite_;
     uint64_t composite_touch_ = ~0ull, composite_osd_ = ~0ull, composite_serial_ = 0, composite_panel_ = ~0ull;
-    const OsdImage* panel_ = nullptr;
-    int panel_x_ = 0, panel_y_ = 0;
-    uint64_t panel_serial_ = 0;
+    struct Panel {
+        const OsdImage* image = nullptr;
+        int x = 0, y = 0;
+        uint64_t serial = 0;
+    };
+    Panel panels_[kPanelSlots];
+    uint64_t panels_key() const;
+    // Without touch controls: the panels drawn together into their bounding box, when there is more than one.
+    OsdImage panels_image_;
+    uint64_t panels_image_key_ = ~0ull, panels_image_serial_ = 0;
+    int panels_image_x_ = 0, panels_image_y_ = 0;
     int composite_osd_x_ = -1;
 };
 

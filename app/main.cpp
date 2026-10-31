@@ -106,6 +106,8 @@
 #include "ingame/gameplay.h"
 #include "frame_stats.h"
 #include "present/minimap.h"
+#include "present/battle_hud.h"
+#include "present/party_hud.h"
 #include "present/monitors.h"
 #include "present/native_window.h"
 #include "settings/controller.h"
@@ -541,6 +543,13 @@ int main(int argc, char** argv) {
             const int usable = po.texture_pack ? po.texture_pack->scale() : po.texture_filter == 2 ? 2 : 1;
             po.internal_res = std::min(g.internal_res, std::max(usable, 1));
         }
+#ifdef __ANDROID__
+        // Battles are 3D and drawn at the full internal resolution: on a phone 4x and up (Remaster is 8x) cannot keep 60
+        // frames a second, and a phone screen shows little of the difference, so phones draw them at 2x at most.
+        else {
+            po.internal_res = std::min(g.internal_res, 2);
+        }
+#endif
         po.seamless_bg = g.seamless_bg;
         const char* modes[] = {"fit", "integer", "stretch"};
         dw3::parse_scale_mode(modes[g.scale_mode], po.scale);
@@ -579,6 +588,10 @@ int main(int argc, char** argv) {
     // Where the minimap is on screen (w = 0 while hidden), and whether a tap on it made it large.
     int minimap_x = 0, minimap_y = 0, minimap_w = 0, minimap_h = 0;
     bool minimap_large = false;
+    // The party HUD (gameplay.party_hud).
+    dw3app::PartyHud party_hud;
+    // The battle HUD (gameplay.battle_hud).
+    dw3app::BattleHud battle_hud;
 #if defined(DW3_ANDROID)
     // On-screen controls; they hide while a gamepad is used and come back when the screen is touched.
     dw3app::TouchControls touch;
@@ -883,7 +896,7 @@ int main(int argc, char** argv) {
     dw3app::PresentCadence present_cadence;
     bool pacer_started = false, fast_forwarding = false, display_changed = false, fps_shown = false;
     uint64_t fps_window_start = SDL_GetTicksNS();
-    uint64_t last_shown_ns = 0;  // when a frame was last presented
+    uint64_t last_shown_ns = 0;  // when the last present returned
     int fps_frames = 0;
     constexpr uint64_t kFpsWindowNs = 500'000'000;
     dw3app::FrameStats frame_stats;
@@ -1057,13 +1070,41 @@ int main(int argc, char** argv) {
                 minimap_w = image ? image->w : 0;
                 minimap_h = image ? image->h : 0;
                 minimap_x = minimap_large ? (ww - minimap_w) / 2 : u * 5 / 100;
-                minimap_y = minimap_large ? (wh - minimap_h) / 2 : u * 25 / 100;
-                presenter->set_panel(image, minimap_x, minimap_y, minimap.serial());
+                minimap_y = minimap_large ? (wh - minimap_h) / 2 : u * 28 / 100;  // below L1
+                presenter->set_panel(0, image, minimap_x, minimap_y, minimap.serial());
             }
         } else {
-            presenter->set_panel(nullptr, 0, 0, 0);
+            presenter->set_panel(0, nullptr, 0, 0, 0);
             minimap_w = 0;
         }
+        // The party HUD, in the field, on the right between the shoulder and the face buttons.
+        if (settings.active().gameplay.party_hud && in_field) {
+            if (frame % 6 == 0) {
+                int ww = 0, wh = 0;
+                SDL_GetWindowSizeInPixels(window, &ww, &wh);
+                const int u = std::min(ww, wh);
+                const dw3app::PartyState party = dw3app::read_party([&](uint32_t addr) { return dw3_read32(&machine.ctx(), addr); });
+                const dw3app::OsdImage* image = party_hud.frame(party, u * 34 / 100);
+                presenter->set_panel(1, image, image ? ww - u * 5 / 100 - image->w : 0, u * 30 / 100, party_hud.serial());
+            }
+        } else if (settings.active().gameplay.battle_hud && game_mode == 6) {
+            // The battle HUD: the party's cards on the right and the enemies' bars on the left, in the space beside
+            // the 4:3 picture where there is room (between the shoulder buttons and the d-pad or face buttons).
+            if (frame % 3 == 0) {
+                int ww = 0, wh = 0;
+                SDL_GetWindowSizeInPixels(window, &ww, &wh);
+                const int u = std::min(ww, wh), margin = (ww - wh * 4 / 3) / 2;
+                const int width = std::clamp(margin - u * 6 / 100, u * 30 / 100, u * 38 / 100);
+                const dw3app::BattleState battle = dw3app::read_battle([&](uint32_t addr) { return dw3_read32(&machine.ctx(), addr); });
+                const dw3app::OsdImage* cards = battle_hud.party(battle, width);
+                presenter->set_panel(1, cards, cards ? ww - u * 4 / 100 - cards->w : 0, u * 28 / 100, battle_hud.party_serial());
+                const dw3app::OsdImage* bars = battle_hud.enemies(battle, width);
+                presenter->set_panel(2, bars, u * 4 / 100, u * 28 / 100, battle_hud.enemies_serial());
+            }
+        } else {
+            presenter->set_panel(1, nullptr, 0, 0, 0);
+        }
+        if (!(settings.active().gameplay.battle_hud && game_mode == 6)) presenter->set_panel(2, nullptr, 0, 0, 0);
         const auto& shown = settings.active().graphics;
         // Frame pacing "even" repeats presents only while the measured gap between back-to-back presents says the
         // display really runs at a multiple of 60 Hz; the reported refresh rate is just the hint to try.
@@ -1073,14 +1114,16 @@ int main(int argc, char** argv) {
         const int planned = present_cadence.plan_frame();
         const uint64_t present_began_ns = SDL_GetTicksNS();
         // Faster than real time the frames come quicker than the display shows them, so only one per refresh is
-        // presented. Where vsync cannot be turned off (most phones) every present would wait for one and cap the speed.
+        // presented. Where vsync cannot be turned off (most phones) every present waits for the display, so the gap is
+        // counted from when the last present returned: counting from when it began, the wait itself filled the gap and
+        // every frame was presented, holding the game to normal speed.
         const bool sped_up = fast_forward.active() || speed_choice(settings.active()) != 0;
         const uint64_t refresh_ns = static_cast<uint64_t>(1e9 / (refresh_hz > 0.0 ? refresh_hz : 60.0));
         const bool skip_present = sped_up && !want_shot && !unpaced && present_began_ns - last_shown_ns < refresh_ns * 9 / 10;
         const int presents = skip_present ? 0 : planned;
         if (!skip_present) {
             presenter->present(machine.gpu(), want_shot ? &capture : nullptr);
-            last_shown_ns = present_began_ns;
+            last_shown_ns = SDL_GetTicksNS();
         }
         uint64_t last_present_ns = presents > 1 ? SDL_GetTicksNS() : 0;
         for (int again = 1; again < presents; ++again) {
