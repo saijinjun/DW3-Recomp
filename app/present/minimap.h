@@ -1,5 +1,5 @@
 // A small map of the field being walked (gameplay.minimap): the whole map, drawn from the disc's own map pictures (the
-// stage library, see dw3/texrep/stage_library.h) and scaled down, with the part on screen outlined and a dot where the
+// stage library, see dw3/texrep/stage_library.h) and scaled down in the owner's frame art, with the part on screen outlined and a dot where the
 // party stands. The map and scroll come from the GPU renderer, which recognises them from the background sprites the
 // game draws; the party's position in the field is in map pixels too. No SDL dependency.
 #pragma once
@@ -26,6 +26,10 @@ public:
     // The map drawn whole at full size, RGBA, transparent where no cell has a picture. Exposed for tests.
     static dw3::texrep::Image compose(dw3::texrep::StageLibrary& library, int map);
 
+    // The picture's pixel for map pixel (mx, my) of the map drawn last. Exposed for tests.
+    int map_x(int mx) const;
+    int map_y(int my) const;
+
     // Waits for a drawing in progress (tests).
     void wait() {
         if (pending_.valid()) pending_.wait();
@@ -37,7 +41,7 @@ private:
         OsdImage image;             // the framed map without the view marks
         int crop_x = 0, crop_y = 0; // map pixel at the top-left of the drawn part
         float scale = 1.0f;         // panel pixels per map pixel
-        int border = 0;             // panel pixels around the map
+        int left = 0, top = 0, right = 0, bottom = 0;  // frame pixels around the map
     };
     static Base build(dw3::texrep::StageLibrary& library, int map, int size);
 

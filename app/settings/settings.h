@@ -92,6 +92,8 @@ struct Settings {
         int xp_multiplier = 0;       // choice: 1x, 2x, 3x, 5x, 10x (experience from won battles)
         int bits_multiplier = 0;     // choice: 1x, 2x, 3x, 5x, 10x (bits from won battles)
         bool minimap = false;        // a small map of the field in a corner (GPU renderer)
+        bool party_hud = true;       // the party's names, levels, HP/MP bars and the bits, in the field
+        bool battle_hud = true;      // in battle: the party's HP/MP cards and every enemy's HP in figures
         bool heal_after_battle = false;  // the HP and MP of every Digimon are refilled after each won battle
         int difficulty = 0;          // choice: normal, easy, hard (enemies' HP: 100%, 60%, 130%)
         int text_speed = 0;          // choice: normal, fast, instant (how quickly message windows print)

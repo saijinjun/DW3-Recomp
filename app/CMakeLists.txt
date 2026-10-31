@@ -4,6 +4,8 @@ set(DW3_APP_SOURCES main.cpp
     present/osd.cpp
     present/touch_controls.cpp
     present/minimap.cpp
+    present/party_hud.cpp
+    present/battle_hud.cpp
     present/software_presenter.cpp
     present/hw_presenter.cpp
     present/texture_packs.cpp
@@ -21,7 +23,7 @@ if(WIN32)
     target_sources(dw3recomp PRIVATE windows/dw3recomp.rc)
 endif()
 target_include_directories(dw3recomp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(dw3recomp PRIVATE dw3runtime dw3render dw3settings dw3ingame dw3wizard_ui dw3icon dw3host psxdisc SDL3::SDL3)
+target_link_libraries(dw3recomp PRIVATE dw3runtime dw3render dw3settings dw3ingame dw3wizard_ui dw3icon dw3hudart dw3host psxdisc SDL3::SDL3)
 dw3_target_defaults(dw3recomp)
 
 # The recompiler configuration is built into the program: it holds addresses only, and the setup turns it and the disc
