@@ -27,12 +27,15 @@ std::vector<Asset> model_assets();
 inline constexpr const char* kModelName = "RealESRGAN_General_x4_v3";
 
 struct DownloadPlan {
-    std::vector<Asset> assets;  // upscaler first
-    std::string unsupported;    // set when this platform has no upscaler build
+    std::vector<Asset> assets;  // upscaler first, if any
+    // No upscaler program for this platform: the program's own CPU upscaler (dw3/texrep/upscaler.h) runs the model.
+    // Slower, but it runs anywhere, also where an app may not start downloaded programs (phones).
+    bool builtin = false;
 };
 DownloadPlan plan_for(dw3::platform::Os os, dw3::platform::Arch arch);
 
 // Empty when every asset can be fetched and verified; otherwise what is missing (an unset hash or placeholder URL).
+// On Android the model files come with the app (the asset models/), so its plan downloads nothing.
 std::string plan_problem(const DownloadPlan& plan);
 bool is_placeholder_url(const std::string& url);
 
@@ -47,5 +50,9 @@ std::filesystem::path upscaler_executable(const std::filesystem::path& user_data
 std::filesystem::path downloads_dir(const std::filesystem::path& user_data);
 std::filesystem::path texture_pack_dir(const std::filesystem::path& user_data, const std::string& pack_name);
 inline constexpr const char* kPackName = "disc-hd";
+// Present in the pack folder while a build of the pack has started and not finished (it continues where it stopped).
+std::filesystem::path pack_unfinished_marker(const std::filesystem::path& user_data);
+// True when the HD background pack was built to the end.
+bool hd_pack_complete(const std::filesystem::path& user_data);
 
 }  // namespace dw3setup

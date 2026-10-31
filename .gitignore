@@ -8,3 +8,7 @@ generated/
 
 # macOS Finder metadata
 .DS_Store
+
+# APK signing keys stay out of the repository (android/app/build.gradle)
+*.keystore
+*.jks

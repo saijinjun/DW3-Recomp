@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstring>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -17,6 +18,7 @@
 #include "disc_check.h"
 #include "dw3/platform.h"
 #include "dw3/texrep/pack_job.h"
+#include "dw3/texrep/upscaler.h"
 #include "hd_install.h"
 #include "module_build.h"
 #include "process_runner.h"
@@ -116,15 +118,18 @@ void SDLCALL on_file_chosen(void* userdata, const char* const* files, int) {
 
 #if defined(DW3_ANDROID)
 constexpr bool kImportDisc = true;  // picked files are content:// addresses: copy them in before use
+constexpr const char* kDevice = "phone";
 #else
 constexpr bool kImportDisc = false;
+constexpr const char* kDevice = "computer";
 #endif
 
 class SetupUi {
 public:
     SetupUi(SDL_Window* window, const WizardLaunch& launch) : window_(window), launch_(launch) {
         state_.set_disc_path(launch.initial_disc);
-        if (launch.prepare) {
+        if (launch.hd_only) state_.resume_at_hd(launch.initial_disc);
+        else if (launch.prepare) {
             state_.require_prepare(true);
             if (launch.prepare->disc_verified) state_.resume_at_prepare(launch.initial_disc);
         }
@@ -307,21 +312,37 @@ private:
     void hd_offer() {
         heading("Optional: HD backgrounds");
         ImGui::TextWrapped(
-            "The game's field maps are pre-rendered pictures with a low resolution. A local AI upscaler (Real-ESRGAN) can enlarge them four "
-            "times. It runs on your own computer, on your own disc: nothing from your disc is uploaded anywhere.");
+            "The game's field maps are pre-rendered pictures with a low resolution. A local AI upscaler (Real-ESRGAN) can enlarge them. "
+            "It runs on this %s, on your own disc: nothing from your disc is uploaded anywhere.", kDevice);
         ImGui::Spacing();
-        ImGui::TextWrapped("It needs a graphics card with Vulkan support and takes some time to run once. You can skip this now; the HD backgrounds can be set up later with --setup.");
+        if (plan_.builtin) {
+            ImGui::TextWrapped(
+                "It runs on the processor and takes a few hours, once (a phone: keep it charging, with this app open). You can stop at "
+                "any time; the next start continues where it stopped.");
+#if defined(DW3_ANDROID)
+            ImGui::Spacing();
+            colored_wrapped(kMuted, "Skip it now and turn on HD BG in the game's graphics settings later: the next start offers it again. "
+                                    "The finished backgrounds need about 400 MB of storage.");
+#endif
+        } else {
+            ImGui::TextWrapped("It needs a graphics card with Vulkan support and takes some time to run once. You can skip this now; the HD backgrounds can be set up later with --setup.");
+        }
         ImGui::Spacing();
         bool all_known = false;
         const uint64_t total = total_download_bytes(plan_, all_known);
-        std::string size = plan_.unsupported.empty() ? format_bytes(total) : "not available";
-        if (plan_.unsupported.empty() && !all_known) size += " plus the model files (a few MB)";
-        ImGui::Text("Download size: %s", size.c_str());
+        if (!plan_.assets.empty()) {
+            std::string size = format_bytes(total);
+            if (!all_known) size += " plus the model files (a few MB)";
+            ImGui::Text("Download size: %s", size.c_str());
+        }
         if (const std::string problem = plan_problem(plan_); !problem.empty()) colored_wrapped(kWarn, "Not ready in this build: " + problem);
         ImGui::Spacing();
-        ImGui::TextWrapped("Licences: the upscaler (realesrgan-ncnn-vulkan) is MIT; the model weights (Real-ESRGAN) are BSD 3-Clause.");
+        if (plan_.builtin)
+            ImGui::TextWrapped("Licence: the model weights (Real-ESRGAN) are BSD 3-Clause.");
+        else
+            ImGui::TextWrapped("Licences: the upscaler (realesrgan-ncnn-vulkan) is MIT; the model weights (Real-ESRGAN) are BSD 3-Clause.");
         ImGui::Spacing();
-        if (ImGui::CollapsingHeader("What is downloaded, and from where")) {
+        if (!plan_.assets.empty() && ImGui::CollapsingHeader("What is downloaded, and from where")) {
             ImGui::TextWrapped("Downloads use the curl program that comes with your system.");
             for (const Asset& a : plan_.assets) {
                 ImGui::Spacing();
@@ -372,7 +393,8 @@ private:
         ImGui::Spacing();
         ImGui::ProgressBar(snap.fraction < 0 ? -1.0f * static_cast<float>(ImGui::GetTime()) : static_cast<float>(snap.fraction), ImVec2(-1, 0));
         ImGui::Spacing();
-        colored_wrapped(kMuted, "Upscaling every field map takes a while. You can cancel; the next run continues where this one stopped.");
+        colored_wrapped(kMuted, plan_.builtin ? "Upscaling every field map takes a few hours. You can cancel; the next start continues where this one stopped."
+                                              : "Upscaling every field map takes a while. You can cancel; the next run continues where this one stopped.");
     }
 
     void done() {
@@ -382,7 +404,11 @@ private:
         ImGui::TextWrapped("Disc: %s", state_.disc_path().c_str());
         ImGui::TextWrapped("HD backgrounds: %s", hd_done_ ? "installed and turned on" : "not set up");
         ImGui::Spacing();
+#if defined(DW3_ANDROID)
+        colored_wrapped(kMuted, "Video, audio and gameplay options are in the settings menu of the game. Turning on HD BG there offers the HD backgrounds again at the next start.");
+#else
         colored_wrapped(kMuted, "Video, audio and gameplay options are in the settings menu of the game. Run with --setup to change the disc or set up HD backgrounds later.");
+#endif
     }
 
     void footer_buttons() {
@@ -397,7 +423,10 @@ private:
                 if (state_.prepare_failed()) buttons = {{"Try again", 10}, {"Quit", 9}};
                 else buttons = {{"Cancel", 6}};
                 break;
-            case Step::HdOffer: buttons = {{"Accept and download", 3}, {"Skip", 4}, {"Back", 2}}; break;
+            case Step::HdOffer:
+                if (state_.hd_only()) buttons = {{plan_.assets.empty() ? "Create them" : "Accept and download", 3}, {"Not now", 4}};
+                else buttons = {{plan_.assets.empty() ? "Create them" : "Accept and download", 3}, {"Skip", 4}, {"Back", 2}};
+                break;
             case Step::HdWork:
                 if (state_.hd_phase() == HdPhase::Failed) buttons = {{"Try again", 5}, {"Skip", 4}};
                 else buttons = {{"Cancel", 6}};
@@ -571,9 +600,10 @@ private:
         config.disc = dw3::platform::path_from_utf8(state_.disc_path());
         config.plan = plan_;
         config.run = [](const std::vector<std::string>& command, const std::atomic<bool>& cancel) { return run_process(command, cancel); };
-        config.generate = [disc = config.disc](const fs::path& upscaler, const fs::path& models, const fs::path& pack_dir,
-                                               const std::function<void(std::size_t, std::size_t)>& progress,
-                                               const std::atomic<bool>& cancel, std::string& error) {
+        config.generate = [disc = config.disc, user_data = launch_.user_data](
+                              const fs::path& upscaler, const fs::path& models, const fs::path& pack_dir,
+                              const std::function<void(std::size_t, std::size_t)>& progress, const std::atomic<bool>& cancel,
+                              std::string& error) {
             dw3::texrep::PackJob job;
             job.disc = disc;
             job.out = pack_dir;
@@ -584,8 +614,25 @@ private:
             job.cancelled = [&cancel] { return cancel.load(); };
             job.run = [&cancel](const std::vector<std::string>& command) { return run_process(command, cancel); };
             job.progress = progress;
+            if (upscaler.empty()) {
+#if defined(DW3_ANDROID)
+                if (!android::install_models(models, error)) return false;
+                // Twice the resolution, as JPEG: a phone's screen gains little from 4x, and the pack stays near 400 MB.
+                job.scale = 2;
+                job.jpeg_quality = 95;
+#endif
+                std::shared_ptr<const dw3::texrep::CompactUpscaler> model = dw3::texrep::CompactUpscaler::load(models, kModelName, error);
+                if (!model) return false;
+                job.model_scale = model->scale();
+                job.upscale = dw3::texrep::builtin_batch_upscaler(model, 0, job.cancelled);
+            }
+            std::error_code ec;
+            fs::create_directories(pack_dir, ec);
+            std::ofstream(pack_unfinished_marker(user_data)) << "The pack is being built; it continues at the next start.\n";
             dw3::texrep::GenerateReport report;
-            return dw3::texrep::run_pack_job(job, report, error);
+            if (!dw3::texrep::run_pack_job(job, report, error)) return false;
+            fs::remove(pack_unfinished_marker(user_data), ec);
+            return true;
         };
         installer_ = std::make_unique<HdInstaller>(std::move(config));
         worker_ = std::thread([this] {

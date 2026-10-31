@@ -8,7 +8,7 @@
 // The upscaler is realesrgan-ncnn-vulkan (https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan); it and its model files
 // are not shipped and are never downloaded by this tool (the first-run wizard of dw3recomp does that, on request).
 // Point --upscaler and --models at an installation, or put them in <user data dir>/tools (realesrgan-ncnn-vulkan and
-// models/).
+// models/). `--upscaler builtin` runs the compact models on the CPU instead (render/include/dw3/texrep/upscaler.h).
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -17,6 +17,7 @@
 
 #include "dw3/platform.h"
 #include "dw3/texrep/pack_job.h"
+#include "dw3/texrep/upscaler.h"
 
 namespace fs = std::filesystem;
 using namespace dw3::texrep;
@@ -34,7 +35,10 @@ void usage() {
         "  --out PACK_DIR     the pack to write; an existing pack of the same scale is extended\n"
         "  --name NAME        pack name stored in the manifest (default: the output folder name)\n"
         "  --scale N          replacement pixels per original texel: 2 or 4 (default 4)\n"
-        "  --upscaler PATH    realesrgan-ncnn-vulkan executable (default: <user data dir>/tools)\n"
+        "  --upscaler PATH    realesrgan-ncnn-vulkan executable (default: <user data dir>/tools), or builtin: the CPU\n"
+        "                     upscaler of this program, slower, for computers without a Vulkan GPU\n"
+        "  --threads N        threads of the builtin upscaler (default: one per core)\n"
+        "  --jpeg Q           store the pack's images as JPEG of quality Q (95 looks the same and is a quarter of the size)\n"
         "  --models DIR       folder with the model files (default: <user data dir>/tools/models)\n"
         "  --model NAME       model name without extension (default RealESRGAN_General_x4_v3)\n"
         "  --model-scale N    factor of the model (default 4)\n"
@@ -87,6 +91,7 @@ int main(int argc, char** argv) {
     }
     const bool extract_only = args[1] == "extract";
     PackJob job;
+    unsigned threads = 0;
     for (std::size_t i = 2; i < args.size(); ++i) {
         const std::string& a = args[i];
         auto value = [&]() -> const std::string& {
@@ -103,6 +108,8 @@ int main(int argc, char** argv) {
         else if (a == "--name") job.name = value();
         else if (a == "--scale") job.scale = std::atoi(value().c_str());
         else if (a == "--upscaler") job.upscaler = dw3::platform::path_from_utf8(value());
+        else if (a == "--threads") threads = static_cast<unsigned>(std::atoi(value().c_str()));
+        else if (a == "--jpeg") job.jpeg_quality = std::atoi(value().c_str());
         else if (a == "--models") job.models = dw3::platform::path_from_utf8(value());
         else if (a == "--model") job.model = value();
         else if (a == "--model-scale") job.model_scale = std::atoi(value().c_str());
@@ -139,7 +146,8 @@ int main(int argc, char** argv) {
 #endif
     if (job.upscaler.empty()) job.upscaler = tools / exe;
     if (job.models.empty()) job.models = tools / "models";
-    if (!fs::exists(job.upscaler)) {
+    const bool builtin = job.upscaler == "builtin";
+    if (!builtin && !fs::exists(job.upscaler)) {
         std::fprintf(stderr, "texpack: upscaler not found: %s (see --upscaler)\n", dw3::platform::path_to_utf8(job.upscaler).c_str());
         return 1;
     }
@@ -147,6 +155,16 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "texpack: model %s not found in %s (see --models, --model)\n", job.model.c_str(),
                      dw3::platform::path_to_utf8(job.models).c_str());
         return 1;
+    }
+    if (builtin) {
+        std::string error;
+        std::shared_ptr<const CompactUpscaler> model = CompactUpscaler::load(job.models, job.model, error);
+        if (!model) {
+            std::fprintf(stderr, "texpack: %s\n", error.c_str());
+            return 1;
+        }
+        job.model_scale = model->scale();
+        job.upscale = builtin_batch_upscaler(model, threads);
     }
     job.run = run;
     job.log = log_line;

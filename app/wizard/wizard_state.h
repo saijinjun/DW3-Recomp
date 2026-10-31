@@ -39,6 +39,9 @@ public:
     void require_prepare(bool required) { prepare_required_ = required; }
     bool prepare_required() const { return prepare_required_; }
     void resume_at_prepare(std::string verified_disc);  // the disc was checked already: start with the work
+    // Only the HD backgrounds, for a game that is set up already: opens at HdOffer, from where there is no going back.
+    void resume_at_hd(std::string verified_disc);
+    bool hd_only() const { return hd_only_; }
     bool prepare_failed() const { return prepare_failed_; }
     const std::string& prepare_error() const { return prepare_error_; }
     void fail_prepare(std::string message);  // PrepareWork only
@@ -71,6 +74,7 @@ private:
     std::string hd_error_;
     bool hd_installed_ = false;
     bool prepare_required_ = false;
+    bool hd_only_ = false;
     bool prepare_failed_ = false;
     bool prepared_ = false;
     std::string prepare_error_;

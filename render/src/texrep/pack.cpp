@@ -61,23 +61,20 @@ bool read_png(const std::filesystem::path& path, Image& out, std::string& error)
     return true;
 }
 
-bool write_png(const std::filesystem::path& path, const Image& img, std::string& error, bool with_alpha) {
-    std::string bytes;
+namespace {
+
+std::vector<uint8_t> rgb_bytes(const Image& img) {
     std::vector<uint8_t> rgb;
-    if (!with_alpha) {
-        rgb.reserve(img.rgba.size() * 3);
-        for (uint32_t p : img.rgba) {
-            rgb.push_back(static_cast<uint8_t>(p));
-            rgb.push_back(static_cast<uint8_t>(p >> 8));
-            rgb.push_back(static_cast<uint8_t>(p >> 16));
-        }
+    rgb.reserve(img.rgba.size() * 3);
+    for (uint32_t p : img.rgba) {
+        rgb.push_back(static_cast<uint8_t>(p));
+        rgb.push_back(static_cast<uint8_t>(p >> 8));
+        rgb.push_back(static_cast<uint8_t>(p >> 16));
     }
-    const int channels = with_alpha ? 4 : 3;
-    const void* data = with_alpha ? static_cast<const void*>(img.rgba.data()) : static_cast<const void*>(rgb.data());
-    if (!stbi_write_png_to_func(append_to_stream, &bytes, img.w, img.h, channels, data, img.w * channels)) {
-        error = "cannot encode PNG";
-        return false;
-    }
+    return rgb;
+}
+
+bool save_bytes(const std::filesystem::path& path, const std::string& bytes, std::string& error) {
     std::error_code ec;
     if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path(), ec);
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
@@ -86,6 +83,32 @@ bool write_png(const std::filesystem::path& path, const Image& img, std::string&
         return false;
     }
     return true;
+}
+
+}  // namespace
+
+bool write_jpeg(const std::filesystem::path& path, const Image& img, int quality, std::string& error) {
+    std::string bytes;
+    const std::vector<uint8_t> rgb = rgb_bytes(img);
+    // stb keeps full colour resolution (no chroma subsampling) above quality 90.
+    if (!stbi_write_jpg_to_func(append_to_stream, &bytes, img.w, img.h, 3, rgb.data(), quality)) {
+        error = "cannot encode JPEG";
+        return false;
+    }
+    return save_bytes(path, bytes, error);
+}
+
+bool write_png(const std::filesystem::path& path, const Image& img, std::string& error, bool with_alpha) {
+    std::string bytes;
+    std::vector<uint8_t> rgb;
+    if (!with_alpha) rgb = rgb_bytes(img);
+    const int channels = with_alpha ? 4 : 3;
+    const void* data = with_alpha ? static_cast<const void*>(img.rgba.data()) : static_cast<const void*>(rgb.data());
+    if (!stbi_write_png_to_func(append_to_stream, &bytes, img.w, img.h, channels, data, img.w * channels)) {
+        error = "cannot encode PNG";
+        return false;
+    }
+    return save_bytes(path, bytes, error);
 }
 
 bool parse_pack_manifest(std::string_view text, PackManifest& out, std::string& error) {

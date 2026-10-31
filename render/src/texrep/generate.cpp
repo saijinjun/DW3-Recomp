@@ -72,6 +72,8 @@ bool generate_pack(const std::vector<std::filesystem::path>& dump_dirs, const st
         }
     }
 
+    const std::string extension = options.jpeg_quality > 0 ? ".jpg" : ".png";
+
     // Collect the work: every dumped texture the pack does not have yet, with its component image.
     struct Item {
         DumpTexture texture;
@@ -102,7 +104,7 @@ bool generate_pack(const std::vector<std::filesystem::path>& dump_dirs, const st
             }
             have.insert({t.block, t.clut});
             // Finished by an earlier run that was stopped before it wrote the manifest: keep the image.
-            PackEntry done{t.block, t.clut, t.width, t.height, "tex/" + hash_to_hex(t.block) + "_" + hash_to_hex(t.clut) + ".png"};
+            PackEntry done{t.block, t.clut, t.width, t.height, "tex/" + hash_to_hex(t.block) + "_" + hash_to_hex(t.clut) + extension};
             Image existing;
             std::string ignored;
             if (std::filesystem::exists(out_dir / done.file) && read_png(out_dir / done.file, existing, ignored) &&
@@ -192,8 +194,10 @@ bool generate_pack(const std::vector<std::filesystem::path>& dump_dirs, const st
             e.clut = it.texture.clut;
             e.width = it.texture.width;
             e.height = it.texture.height;
-            e.file = "tex/" + hash_to_hex(e.block) + "_" + hash_to_hex(e.clut) + ".png";
-            if (!write_png(out_dir / e.file, result, error, false)) return false;
+            e.file = "tex/" + hash_to_hex(e.block) + "_" + hash_to_hex(e.clut) + extension;
+            if (!(options.jpeg_quality > 0 ? write_jpeg(out_dir / e.file, result, options.jpeg_quality, error)
+                                           : write_png(out_dir / e.file, result, error, false)))
+                return false;
             manifest.entries.push_back(std::move(e));
             ++report.generated;
         }
