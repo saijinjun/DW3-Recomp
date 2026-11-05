@@ -129,9 +129,9 @@ endif()
 
 # On-screen notification text rasterization, the touch controls and the minimap (no SDL dependency).
 dw3_add_test(test_osd
-    SOURCES app/test_osd.cpp app/test_touch_controls.cpp app/test_minimap.cpp ${PROJECT_SOURCE_DIR}/app/present/osd.cpp
-            ${PROJECT_SOURCE_DIR}/app/present/touch_controls.cpp ${PROJECT_SOURCE_DIR}/app/present/minimap.cpp
-    LIBS dw3runtime dw3render)
+    SOURCES app/test_osd.cpp app/test_touch_controls.cpp app/test_minimap.cpp app/test_party_hud.cpp app/test_battle_hud.cpp ${PROJECT_SOURCE_DIR}/app/present/osd.cpp
+            ${PROJECT_SOURCE_DIR}/app/present/touch_controls.cpp ${PROJECT_SOURCE_DIR}/app/present/minimap.cpp ${PROJECT_SOURCE_DIR}/app/present/party_hud.cpp ${PROJECT_SOURCE_DIR}/app/present/battle_hud.cpp
+    LIBS dw3runtime dw3render dw3hudart)
 target_include_directories(test_osd PRIVATE ${PROJECT_SOURCE_DIR}/app)
 
 # Settings model, presets, settings.toml and fast-forward pacing.

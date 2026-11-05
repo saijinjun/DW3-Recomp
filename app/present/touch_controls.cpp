@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "dw3/sio.h"
+#include "hud_art.h"
 
 namespace dw3app {
 
@@ -13,9 +14,7 @@ constexpr float kPi = 3.14159265f;
 
 // Colours: RGBA8 with red in the lowest byte, straight alpha.
 constexpr uint32_t rgba(uint32_t r, uint32_t g, uint32_t b, uint32_t a) { return r | (g << 8) | (b << 16) | (a << 24); }
-constexpr uint32_t kFill = rgba(20, 24, 34, 96);
-constexpr uint32_t kFillPressed = rgba(90, 140, 230, 170);
-constexpr uint32_t kEdge = rgba(235, 240, 250, 150);
+constexpr uint32_t kGlow = rgba(120, 220, 255, 150);  // over the art of a pressed control
 constexpr uint32_t kMark = rgba(240, 244, 252, 200);
 constexpr uint32_t kCross = rgba(124, 178, 232, 230), kCircle = rgba(230, 100, 100, 230), kSquare = rgba(220, 140, 200, 230),
                    kTriangle = rgba(80, 200, 160, 230);
@@ -90,6 +89,15 @@ public:
             }
     }
 
+    // Art in the box of half sizes (hx, hy) around (cx, cy); `cap` > 0 keeps that many source pixels at each end in
+    // proportion (pill shapes).
+    void art(const hud_art::Picture& pic, float cx, float cy, float hx, float hy, int cap = 0) {
+        const int x0 = static_cast<int>(std::lround(cx - hx)), y0 = static_cast<int>(std::lround(cy - hy));
+        const int w = static_cast<int>(std::lround(cx + hx)) - x0, h = static_cast<int>(std::lround(cy + hy)) - y0;
+        if (cap > 0) hud_art::blit_capped(img_.rgba.data(), img_.w, img_.h, pic, cap, x0, y0, w, h);
+        else hud_art::blit(img_.rgba.data(), img_.w, img_.h, pic, x0, y0, w, h);
+    }
+
 private:
     OsdImage& img_;
 };
@@ -154,9 +162,10 @@ void TouchControls::layout(int w, int h) {
     controls_.push_back({S::Rect, dw3::kPadSelect, -1, "SELECT", fw * 0.5f - mw - u * 0.03f, my, mw, mh, 0});
     controls_.push_back({S::Rect, dw3::kPadStart, -1, "START", fw * 0.5f + mw + u * 0.03f, my, mw, mh, 0});
     // App buttons at the top centre, at the standard size whatever the size setting: five in a row leave no room to grow
-    // between the shoulder buttons on a 16:9 screen.
+    // between the shoulder buttons on a 16:9 screen. They hug the top edge, low and flat, so they stay clear of the
+    // name and HP panels the game draws along the top of a battle.
     const float u0 = static_cast<float>(std::min(w, h));
-    const float aw = u0 * 0.075f, ah = u0 * 0.04f, ay = margin + ah;
+    const float aw = u0 * 0.075f, ah = u0 * 0.03f, ay = u0 * 0.012f + ah;
     const float gap = aw * 2 + u0 * 0.03f;
     controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::SaveState), "SAVE", fw * 0.5f - gap * 2.0f, ay, aw, ah, 0});
     controls_.push_back({S::Rect, 0, static_cast<int>(TouchAction::FastForward), ">>", fw * 0.5f - gap, ay, aw, ah, 0});
@@ -274,7 +283,6 @@ void TouchControls::draw(int downscale) {
     const uint16_t bits = buttons();
     const float k = 1.0f / static_cast<float>(downscale);
     const float u = static_cast<float>(std::min(image_.w, image_.h));
-    const float edge = std::max(1.5f, u * 0.004f);
     const int text_scale = std::max(2, static_cast<int>(u / 300.0f));
     Canvas cv(image_);
     for (std::size_t i = 0; i < controls_.size(); ++i) {
@@ -288,32 +296,18 @@ void TouchControls::draw(int downscale) {
                          (c.action == static_cast<int>(TouchAction::Encounters) && encounters_off_);
         switch (c.shape) {
             case Control::Shape::DPad: {
-                // A plus shape; the pressed arms light up.
-                const float arm = c.rx * 0.36f;
-                cv.disc(c.x, c.y, c.rx, rgba(20, 24, 34, 50));
-                cv.rounded(c.x, c.y, c.rx * 0.95f, arm, arm * 0.3f, kFill);
-                cv.rounded(c.x, c.y, arm, c.rx * 0.95f, arm * 0.3f, kFill);
-                const float reach = c.rx * 0.6f;
-                if (bits & dw3::kPadUp) cv.rounded(c.x, c.y - reach, arm, arm * 1.3f, arm * 0.3f, kFillPressed);
-                if (bits & dw3::kPadDown) cv.rounded(c.x, c.y + reach, arm, arm * 1.3f, arm * 0.3f, kFillPressed);
-                if (bits & dw3::kPadLeft) cv.rounded(c.x - reach, c.y, arm * 1.3f, arm, arm * 0.3f, kFillPressed);
-                if (bits & dw3::kPadRight) cv.rounded(c.x + reach, c.y, arm * 1.3f, arm, arm * 0.3f, kFillPressed);
-                cv.rounded(c.x, c.y, c.rx * 0.95f, arm, arm * 0.3f, kEdge, edge);
-                cv.rounded(c.x, c.y, arm, c.rx * 0.95f, arm * 0.3f, kEdge, edge);
-                // Arrow marks on the arms.
-                const float t = arm * 0.45f, tip = c.rx * 0.8f;
-                for (int d = 0; d < 4; ++d) {
-                    const float ax = d == 2 ? -1.0f : d == 3 ? 1.0f : 0.0f, ay = d == 0 ? -1.0f : d == 1 ? 1.0f : 0.0f;
-                    const float px = -ay, py = ax;  // perpendicular
-                    const float bx = c.x + ax * (tip - t), by = c.y + ay * (tip - t);
-                    cv.line(c.x + ax * tip, c.y + ay * tip, bx + px * t, by + py * t, edge * 1.5f, kMark);
-                    cv.line(c.x + ax * tip, c.y + ay * tip, bx - px * t, by - py * t, edge * 1.5f, kMark);
-                }
+                // The art's disc with its four arms; the pressed arms glow.
+                cv.art(hud_art::dpad(), c.x, c.y, c.rx, c.rx);
+                const float arm = c.rx * 0.2f, reach = c.rx * 0.55f, along = c.rx * 0.25f;
+                if (bits & dw3::kPadUp) cv.rounded(c.x, c.y - reach, arm, along, arm * 0.4f, kGlow);
+                if (bits & dw3::kPadDown) cv.rounded(c.x, c.y + reach, arm, along, arm * 0.4f, kGlow);
+                if (bits & dw3::kPadLeft) cv.rounded(c.x - reach, c.y, along, arm, arm * 0.4f, kGlow);
+                if (bits & dw3::kPadRight) cv.rounded(c.x + reach, c.y, along, arm, arm * 0.4f, kGlow);
                 break;
             }
             case Control::Shape::Round: {
-                cv.disc(c.x, c.y, c.rx, lit ? kFillPressed : kFill);
-                cv.ring(c.x, c.y, c.rx - edge * 0.5f, edge, kEdge);
+                cv.art(hud_art::face(), c.x, c.y, c.rx, c.rx);
+                if (lit) cv.disc(c.x, c.y, c.rx * 0.8f, kGlow);
                 const float s = c.rx * 0.45f, w = std::max(2.0f, c.rx * 0.11f);
                 if (c.pad_bit == dw3::kPadCross) {
                     cv.line(c.x - s, c.y - s, c.x + s, c.y + s, w, kCross);
@@ -331,9 +325,12 @@ void TouchControls::draw(int downscale) {
                 break;
             }
             case Control::Shape::Rect: {
-                const float rr = std::min(c.rx, c.ry) * 0.6f;
-                cv.rounded(c.x, c.y, c.rx, c.ry, rr, lit ? kFillPressed : kFill);
-                cv.rounded(c.x, c.y, c.rx, c.ry, rr, kEdge, edge);
+                // L1/L2 and R1/R2 get the slanted shoulder art, the rest the pill.
+                const bool left = c.pad_bit == dw3::kPadL1 || c.pad_bit == dw3::kPadL2;
+                const bool right = c.pad_bit == dw3::kPadR1 || c.pad_bit == dw3::kPadR2;
+                if (left || right) cv.art(left ? hud_art::shoulder_l() : hud_art::shoulder_r(), c.x, c.y, c.rx, c.ry);
+                else cv.art(hud_art::pill(), c.x, c.y, c.rx, c.ry, hud_art::pill().h / 2);
+                if (lit) cv.rounded(c.x, c.y, c.rx * 0.85f, c.ry * 0.6f, c.ry * 0.5f, kGlow);
                 cv.text(c.label, c.x, c.y, text_scale, kMark);
                 break;
             }
