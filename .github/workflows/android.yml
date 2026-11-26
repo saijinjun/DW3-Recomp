@@ -1,9 +1,12 @@
 name: Android
 
+# Documentation-only changes (Markdown files or docs/) start no run.
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**']
   workflow_dispatch:
 
 concurrency:
@@ -18,7 +21,11 @@ jobs:
   apk:
     name: Android APK (arm64)
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     env:
+      # The native code compiles through ccache (Gradle's CMake picks these up); see the ccache step.
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
       ZIG_VERSION: 0.17.0
       ZIG_ARCHIVE: zig-aarch64-linux-0.17.0.tar.xz
       ZIG_SHA256: 9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8
@@ -55,6 +62,13 @@ jobs:
           mv "$ninja" "$ninja.real"
           printf '#!/bin/sh\nexec "%s" -k 0 "$@"\n' "$ninja.real" > "$ninja"
           chmod +x "$ninja"
+
+      # Only runs on main save the cache; pull requests start from main's and recompile only what they changed.
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: android-arm64
+          max-size: 500M
+          save: ${{ github.event_name != 'pull_request' }}
 
       - uses: gradle/actions/setup-gradle@v4
         with:
