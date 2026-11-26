@@ -3,10 +3,14 @@ name: CI
 # Branch pushes are tested through their pull request, so a push runs CI only on main. macOS minutes cost 10 times
 # Linux minutes and Windows twice, so those two jobs run on main and by hand (Actions > CI > Run workflow), not on every
 # pull request commit; release.yml still builds both for every version tag.
+# A change that only touches documentation (Markdown files or docs/) builds nothing, so it starts no run; nothing the
+# build or the tests read lives there.
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**']
   workflow_dispatch:
 
 concurrency:
@@ -16,11 +20,19 @@ concurrency:
 # No game data is available here, so the recompiled game and the in-game scenarios are not built or run: the program is
 # built without game code, the way it is released (the player's setup builds the game module from their own disc). The
 # jobs build the tools, the runtime and the renderer, and run the unit tests (the ones that need a disc skip themselves).
+#
+# Linux and macOS compile through ccache. Only runs on main save the cache, and pull requests start from main's, so a
+# pull request recompiles only what it changed (most of the build is SDL and the other dependencies, which rarely
+# change). A timeout stops a hung job long before GitHub's six-hour limit.
 
 jobs:
   linux:
     name: Linux x64 build and unit tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +43,12 @@ jobs:
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev \
             libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev libudev-dev libdrm-dev libgbm-dev \
             libegl-dev libvulkan-dev
+
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}
+          max-size: 500M
+          save: ${{ github.event_name != 'pull_request' }}
 
       - name: Configure
         run: cmake --preset linux-x64-debug
@@ -46,6 +64,10 @@ jobs:
   linux-arm64:
     name: Linux arm64 build and unit tests
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
     steps:
       - uses: actions/checkout@v4
 
@@ -56,6 +78,12 @@ jobs:
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev \
             libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev libudev-dev libdrm-dev libgbm-dev \
             libegl-dev libvulkan-dev
+
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}
+          max-size: 500M
+          save: ${{ github.event_name != 'pull_request' }}
 
       - name: Configure
         run: cmake --preset linux-arm64-debug
@@ -70,11 +98,21 @@ jobs:
     name: macOS arm64 build and unit tests
     if: github.event_name != 'pull_request'
     runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
     steps:
       - uses: actions/checkout@v4
 
       - name: Install packages
         run: brew install cmake ninja glslang sdl3 spirv-tools
+
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}
+          max-size: 500M
+          save: ${{ github.event_name != 'pull_request' }}
 
       - name: Configure
         run: cmake --preset macos-arm64-debug
@@ -90,6 +128,7 @@ jobs:
     name: Windows x64 native build and unit tests
     if: github.event_name != 'pull_request'
     runs-on: windows-latest
+    timeout-minutes: 45
     env:
       GLSLANG_VERSION: 16.6.0
     steps:
