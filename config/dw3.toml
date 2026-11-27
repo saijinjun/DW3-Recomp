@@ -374,8 +374,8 @@ addr = 0x800A84F8  # addiu
 imm_was = 0xEB68
 imm = 0x2000
 
-# The digivolution conditions (forms_table.h): STFGTREP's check reads the rookie's pointer from 0x800072A0 instead
-# of its table at 0x80088728, and checks 200 conditions (0xC80 bytes) instead of 44.
+# The digivolution conditions (forms_table.h): STFGTREP's check reads the rookie's pointer from 0x80006150 instead
+# of its table at 0x80088728, and checks 178 conditions (0xB20 bytes) instead of 44.
 [[patch]]
 segment = "STFGTREP"
 addr = 0x80085A5C  # lui
@@ -386,11 +386,11 @@ imm = 0x8000
 segment = "STFGTREP"
 addr = 0x80085A60  # addiu
 imm_was = 0x8728
-imm = 0x72A0
+imm = 0x6150
 
 [[patch]]
 segment = "STFGTREP"
 addr = 0x80085C68  # addiu
 imm_was = 0x02C0
-imm = 0x0C80
+imm = 0x0B20
 

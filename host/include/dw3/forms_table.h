@@ -24,14 +24,14 @@ constexpr uint32_t kOriginal = 0x8003EB68u;
 constexpr uint32_t kTable = 0x80002000u;
 constexpr uint32_t kRecordSize = 88;
 constexpr uint32_t kOriginalCount = 52;
-constexpr uint32_t kMaxCount = 240;  // up to 0x800072A0; the RAM after it is kept for the forms' DV conditions
+constexpr uint32_t kMaxCount = 190;  // up to 0x80006150; the RAM after it is kept for the DV conditions and learned forms
 constexpr uint32_t kNameIndex = 0x55;
 
 constexpr uint32_t kRookieCount = 8;
-constexpr uint32_t kDvPointers = 0x800072A0u;
-constexpr uint32_t kDvConditions = 0x800072C0u;
+constexpr uint32_t kDvPointers = 0x80006150u;
+constexpr uint32_t kDvConditions = 0x80006180u;
 constexpr uint32_t kDvConditionSize = 16;
-constexpr uint32_t kDvConditionCount = 200;  // per rookie; ends at 0x8000D6C0
+constexpr uint32_t kDvConditionCount = 178;  // per rookie (44 + 134 new forms); the lists end at 0x8000BA80
 constexpr uint32_t kOriginalConditionCount = 44;
 // STFGTREP.PRO: loaded at kOverlayBase, its pointer table at kDvPointerTable.
 constexpr uint32_t kOverlayBase = 0x80082448u;
@@ -57,4 +57,20 @@ void install(Machine& machine);
 // Number of records the lookups search.
 uint32_t count();
 
+
+// Learned forms. The game keeps, per partner (roster entry p, 0x3DC bytes from 0x80048C50), 44 slots of 20 bytes at
+// +0x50 (id s16, DV level u8 at +2, a counter u32 at +4); the code touching them is six functions called through
+// the table at 0x8004AC14. They are replaced by versions that treat slots 44.. as a second array of kExtSlots
+// 4-byte entries (id s16, level u8, counter u8) per partner at kLearnedExt, so a partner can learn every form. The
+// array is in RAM, so save states keep it; the game's own saves only hold the first 44.
+constexpr uint32_t kGameSlots = 44;
+constexpr uint32_t kExtSlots = 136;
+constexpr uint32_t kExtPartners = 8;
+constexpr uint32_t kLearnedExt = 0x8000BA80u;  // kExtPartners x kExtSlots x 4 bytes, ends at 0x8000CB80
+// The forms list shown by the DV lab holds 44; page n shows learned forms 44n..44n+43.
+void set_page(uint32_t page);
+uint32_t page();
+
 }  // namespace dw3::host::forms_table
+
+// (appended below the namespace close in the original file; see the learned forms section)
