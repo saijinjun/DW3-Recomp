@@ -119,6 +119,7 @@ struct Host::Worker {
 struct Host::Impl {
     Config cfg;
     std::unique_ptr<DiscSource> disc_source;
+    std::unique_ptr<ModSectorSource> mod_source;  // the disc plus replaced files, when cfg.disc_mod is set
     std::array<std::vector<uint8_t>, 2> image;
     std::array<std::filesystem::path, 2> path;  // empty = memory only
     std::array<bool, 2> dirty{};
@@ -248,7 +249,17 @@ std::unique_ptr<Host> Host::create(const Config& cfg, std::string& error) {
     Bios& bios = *h->bios_;
     Host* self = h.get();
     im.disc_source = std::make_unique<DiscSource>(*h->disc_);
-    m.cdrom().set_disc(im.disc_source.get());
+    SectorSource* source = im.disc_source.get();
+    if (cfg.disc_mod && !cfg.disc_mod->empty()) {
+        im.mod_source = std::make_unique<ModSectorSource>(*im.disc_source, h->disc_->sector_count());
+        std::string mod_error = apply_disc_mod(*cfg.disc_mod, h->exe_, *im.mod_source);
+        if (!mod_error.empty()) {
+            error = "game file changes: " + mod_error;
+            return nullptr;
+        }
+        source = im.mod_source.get();
+    }
+    m.cdrom().set_disc(source);
     m.kernel_idle = [self]() { return self->bios_->host_depth() == 0; };
     m.spu().start(m.scheduler());  // timed sample generation (a periodic event; plain Machine tests stay quiet)
 

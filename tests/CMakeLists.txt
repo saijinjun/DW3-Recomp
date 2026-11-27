@@ -90,6 +90,11 @@ dw3_add_test(test_render
     SOURCES render/test_vram_regions.cpp render/test_vertex_builder.cpp render/test_hw_renderer.cpp render/test_postfx.cpp render/test_texrep.cpp render/test_stage_pack.cpp render/test_field_backdrop.cpp render/test_image_loader.cpp render/test_upscaler.cpp
     LIBS dw3render)
 
+dw3_add_test(test_host
+    SOURCES host/test_disc_mod.cpp
+    LIBS dw3host)
+target_include_directories(test_host PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 dw3_add_test(test_scenario_format
     SOURCES scenario/test_scenario_format.cpp
     LIBS dw3scenario_core)
