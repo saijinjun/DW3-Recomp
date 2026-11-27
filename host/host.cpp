@@ -4,6 +4,9 @@
 #include <chrono>
 #include <condition_variable>
 #include <deque>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <mutex>
 #include <thread>
 #include <cstring>
@@ -125,6 +128,7 @@ struct Host::Impl {
     std::array<std::filesystem::path, 2> path;  // empty = memory only
     std::array<bool, 2> dirty{};
     std::array<int, 2> countdown{};
+    std::function<void(int)> on_flush;  // after a card file was written
     std::map<uint32_t, uint64_t> unmapped;  // physical address -> access count
 
     void log(const std::string& s) const {
@@ -161,6 +165,7 @@ struct Host::Impl {
         if (image[s].empty() || path[s].empty()) return;
         if (!memcard::save_card_file(path[s], image[s])) log("cannot write memory card " + platform::path_to_utf8(path[s]));
         dirty[s] = false;
+        if (on_flush) on_flush(slot);
     }
     void touch(int slot) {
         auto s = static_cast<std::size_t>(slot & 1);
@@ -298,6 +303,22 @@ std::unique_ptr<Host> Host::create(const Config& cfg, std::string& error) {
             m.sio().attach_card(1, im.image[1]);
             im.log("memory card 2: " + platform::path_to_utf8(p2));
         }
+    }
+    if (cfg.card_mode == CardMode::Files && cfg.disc_mod && !cfg.disc_mod->extra_forms.empty() && !im.path[0].empty()) {
+        // Learned forms past the game's 44 slots are not in the game's save: keep them beside the card file.
+        std::filesystem::path ext = im.path[0];
+        ext += ".forms";
+        if (std::ifstream in(ext, std::ios::binary); in) {
+            std::vector<uint8_t> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            forms_table::load_extension(m, data);
+        }
+        Machine* mp = &m;
+        im.on_flush = [mp, ext](int slot) {
+            if (slot != 0) return;
+            auto data = forms_table::save_extension(*mp);
+            std::ofstream out(ext, std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+        };
     }
     if (cfg.card_mode == CardMode::Files) {
         m.sio().on_card_write = [self](int slot, uint32_t) { self->impl_->touch(slot); };

@@ -57,6 +57,10 @@ void install(Machine& machine);
 // Number of records the lookups search.
 uint32_t count();
 
+// The learned forms past the game's 44 slots (kept outside the game's save): read from / written to the machine.
+std::vector<uint8_t> save_extension(Machine& machine);
+void load_extension(Machine& machine, std::span<const uint8_t> data);
+
 
 // Learned forms. The game keeps, per partner (roster entry p, 0x3DC bytes from 0x80048C50), 44 slots of 20 bytes at
 // +0x50 (id s16, DV level u8 at +2, a counter u32 at +4); the code touching them is six functions called through

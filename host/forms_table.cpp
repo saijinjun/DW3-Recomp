@@ -219,4 +219,16 @@ void install(Machine& machine) {
 
 uint32_t count() { return g_count; }
 
+namespace {
+constexpr std::size_t kExtBytes = std::size_t{kExtPartners} * kExtSlots * 4;
+}
+std::vector<uint8_t> save_extension(Machine& machine) {
+    const uint8_t* p = machine.ctx().ram + phys(kLearnedExt);
+    return std::vector<uint8_t>(p, p + kExtBytes);
+}
+void load_extension(Machine& machine, std::span<const uint8_t> data) {
+    if (data.size() != kExtBytes) return;
+    std::memcpy(machine.ctx().ram + phys(kLearnedExt), data.data(), kExtBytes);
+}
+
 }  // namespace dw3::host::forms_table
