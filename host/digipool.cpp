@@ -187,11 +187,11 @@ constexpr uint16_t kMegas[] = {0x188, 0x189, 0x18A, 0xD5, 0x94, 0x171, 0x178, 0x
 
 // Forms table record (88 bytes): id; str, def, spt, wis, spd, chr; 7 resistances (fire, water, ice, wind, thunder,
 // machine, dark); attack; 5 techs; signature tech; DNA tech; ...; DNA partner index at +0x3D; name index at +0x55.
-constexpr std::size_t kRecStats = 2, kRecRes = 0x0E, kRecAttack = 0x1C, kRecSignature = 0x28, kRecDnaTech = 0x2A,
+constexpr std::size_t kRecStats = 2, kRecRes = 0x0E, kRecAttack = 0x1C, kRecLastTech = 0x26, kRecSignature = 0x28, kRecDnaTech = 0x2A,
                       kRecDnaIndex = 0x3D, kRecName = 0x55;
 // Enemy stats record (70 bytes): id, drop item, drop rate, name index, attack, move 1, move 2, str, def, spt, wis,
 // spd, 7 resistances, ...
-constexpr std::size_t kEnName = 6, kEnAttack = 8, kEnMove1 = 10, kEnStats = 14, kEnRes = 24;
+constexpr std::size_t kEnName = 6, kEnAttack = 8, kEnMove1 = 10, kEnMove2 = 12, kEnStats = 14, kEnRes = 24;
 
 std::span<const uint16_t> templates_for(Stage s) {
     switch (s) {
@@ -382,6 +382,8 @@ std::vector<uint8_t> make_record(std::span<const uint8_t> tpl, std::span<const u
     spread(kRecRes, kEnRes, 7, 1.0f, 150);
     wr16(r, kRecAttack, rd16(en, kEnAttack));
     if (uint16_t m = rd16(en, kEnMove1)) wr16(r, kRecSignature, m);
+    // The enemy's second move replaces the template's last technique (most enemies have no moves: they keep the template's).
+    if (uint16_t m = rd16(en, kEnMove2); m && m != rd16(en, kEnMove1)) wr16(r, kRecLastTech, m);
     wr16(r, kRecDnaTech, 0);  // no DNA digivolution for the new forms
     r[kRecDnaIndex] = 0;
     r[kRecName] = static_cast<uint8_t>(rd16(en, kEnName));
