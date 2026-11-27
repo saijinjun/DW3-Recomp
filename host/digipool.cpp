@@ -211,6 +211,155 @@ int highest(std::span<const uint8_t> b, std::size_t o, int n) {
     return best;
 }
 
+// Canon predecessor of each new form: the Digimon (a new form's id, or one of the game's own) it digivolves from.
+// Forms not listed, and ones whose predecessor is one of the 8 rookies, need only a partner level.
+struct Line {
+    uint16_t form;
+    uint16_t from;
+};
+constexpr Line kLines[] = {
+    {0x219, 0x204},  // Vegiemon <- Betamon
+    {0x233, 0x220},  // Kuwagamon <- Kunemon
+    {0x2C6, 0x2CE},  // Kiwimon <- Tapirmon
+    {0x2A6, 0x220},  // Dokugumon <- Kunemon
+    {0x2AC, 0x250},  // Minotarumon <- Goburimon
+    {0x289, 0x220},  // Flymon <- Kunemon
+    {0x2DE, 0x2CE},  // Woodmon <- Tapirmon
+    {0x208, 0x003},  // Tyrannomon <- Agumon
+    {0x207, 0x27A},  // Airdramon <- Hagurumon
+    {0x26E, 0x204},  // Gekomon <- Betamon
+    {0x231, 0x284},  // Coelamon <- Gizamon
+    {0x225, 0x2D9},  // Bakemon <- DemiDevimon
+    {0x232, 0x2CE},  // Kokatorimon <- Tapirmon
+    {0x2CF, 0x2CE},  // Apemon <- Tapirmon
+    {0x223, 0x284},  // Shellmon <- Gizamon
+    {0x2D0, 0x284},  // Tortomon <- Gizamon
+    {0x2D2, 0x284},  // Dolphmon <- Gizamon
+    {0x2DC, 0x2C5},  // Gesomon <- Crabmon
+    {0x2DD, 0x2C5},  // Octomon <- Crabmon
+    {0x2F1, 0x2C5},  // Divermon <- Crabmon
+    {0x20A, 0x204},  // Seadramon <- Betamon
+    {0x222, 0x250},  // Ogremon <- Goburimon
+    {0x288, 0x250},  // Tuskmon <- Goburimon
+    {0x26C, 0x250},  // Rockmon <- Goburimon
+    {0x3B3, 0x27A},  // Guardromon <- Hagurumon
+    {0x2B0, 0x27A},  // Thundermon <- Hagurumon
+    {0x28F, 0x27A},  // Clockmon <- Hagurumon
+    {0x20B, 0x204},  // Numemon <- Betamon
+    {0x227, 0x204},  // Sukamon <- Betamon
+    {0x2AB, 0x220},  // Roachmon <- Kunemon
+    {0x28B, 0x204},  // Raremon <- Betamon
+    {0x286, 0x220},  // Cyclonemon <- Kunemon
+    {0x24C, 0x27A},  // Tankmon <- Hagurumon
+    {0x235, 0x204},  // Nanimon <- Betamon
+    {0x2AD, 0x250},  // Musyamon <- Goburimon
+    {0x2AF, 0x220},  // Kurisarimon <- Kunemon
+    {0x2EE, 0x220},  // Snimon <- Kunemon
+    {0x32E, 0x2D9},  // Gargoylemon <- DemiDevimon
+    {0x28A, 0x2D9},  // Deltamon <- DemiDevimon
+    {0x218, 0x284},  // Whamon <- Gizamon
+    {0x2AA, 0x2D9},  // Vilemon <- DemiDevimon
+    {0x226, 0x250},  // Drimogemon <- Goburimon
+    {0x245, 0x250},  // Flarerizamon <- Goburimon
+    {0x209, 0x250},  // Meramon <- Goburimon
+    {0x234, 0x250},  // Mojyamon <- Goburimon
+    {0x217, 0x2CE},  // Frigimon <- Tapirmon
+    {0x25E, 0x2CE},  // Icemon <- Tapirmon
+    {0x347, 0x2CE},  // Lynxmon <- Tapirmon
+    {0x287, 0x2D9},  // Devidramon <- DemiDevimon
+    {0x319, 0x284},  // Tylomon <- Gizamon
+    {0x310, 0x27A},  // Shadramon <- Hagurumon
+    {0x24D, 0x2CE},  // RedVegiemon <- Tapirmon
+    {0x259, 0x250},  // Fugamon <- Goburimon
+    {0x315, 0x182},  // Baronmon <- Dinohumon
+    {0x2CB, 0x208},  // Triceramon <- Tyrannomon
+    {0x2DF, 0x225},  // Phantomon <- Bakemon
+    {0x277, 0x26E},  // ShogunGekomon <- Gekomon
+    {0x2D4, 0x288},  // Mammothmon <- Tuskmon
+    {0x22A, 0x222},  // Etemon <- Ogremon
+    {0x311, 0x207},  // Quetzalmon <- Airdramon
+    {0x21C, 0x27A},  // Vademon <- Hagurumon
+    {0x34E, 0x207},  // Maildramon <- Airdramon
+    {0x20D, 0x28F},  // Mamemon <- Clockmon
+    {0x228, 0x3B3},  // Andromon <- Guardromon
+    {0x2E3, 0x227},  // Garbagemon <- Sukamon
+    {0x236, 0x287},  // Megadramon <- Devidramon
+    {0x20E, 0x20B},  // Monzaemon <- Numemon
+    {0x2C8, 0x2DE},  // Blossomon <- Woodmon
+    {0x279, 0x2DE},  // Cherrymon <- Woodmon
+    {0x36C, 0x28B},  // Mummymon <- Raremon
+    {0x36D, 0x2A6},  // Arukenimon <- Dokugumon
+    {0x2E2, 0x233},  // Okuwamon <- Kuwagamon
+    {0x28C, 0x208},  // MetalTyrannomon <- Tyrannomon
+    {0x2E0, 0x2DD},  // MarineDevimon <- Octomon
+    {0x23D, 0x20A},  // MegaSeadramon <- Seadramon
+    {0x2A5, 0x2F1},  // Ebidramon <- Divermon
+    {0x2F4, 0x32E},  // SkullSatamon <- Gargoylemon
+    {0x27E, 0x2D0},  // Brachiomon <- Tortomon
+    {0x229, 0x28F},  // Giromon <- Clockmon
+    {0x2BD, 0x209},  // SkullMeramon <- Meramon
+    {0x2ED, 0x287},  // Kimeramon <- Devidramon
+    {0x2CA, 0x233},  // Scorpiomon <- Kuwagamon
+    {0x368, 0x347},  // Antylamon <- Lynxmon
+    {0x2B1, 0x2AA},  // LadyDevimon <- Vilemon
+    {0x2F5, 0x2AA},  // Infermon <- Vilemon
+    {0x268, 0x209},  // BlueMeramon <- Meramon
+    {0x27C, 0x28C},  // MasterTyrannomon <- MetalTyrannomon
+    {0x246, 0x20B},  // WaruMonzaemon <- Numemon
+    {0x28D, 0x3B3},  // Datamon <- Guardromon
+    {0x2B2, 0x3B3},  // Knightmon <- Guardromon
+    {0x3B4, 0x2DE},  // Bulbmon <- Woodmon
+    {0x3B5, 0x347},  // Persiamon <- Lynxmon
+    {0x3B6, 0x2B0},  // Raidenmon <- Thundermon
+    {0x3B7, 0x286},  // Fujinmon <- Cyclonemon
+    {0x3B8, 0x319},  // Suijinmon <- Tylomon
+    {0x3B9, 0x2B0},  // Raijinmon <- Thundermon
+    {0x3BD, 0x16F},  // BK00WarGrowlmon <- Growlmon
+    {0x2E1, 0x2E0},  // Dragomon <- MarineDevimon
+    {0x30E, 0x218},  // Vikemon <- Whamon
+    {0x2E5, 0x218},  // Pukumon <- Whamon
+    {0x2CC, 0x23D},  // MetalSeadramon <- MegaSeadramon
+    {0x23C, 0x013},  // H0MKabuterimon <- Kabuterimon
+    {0x2E7, 0x2DE},  // Puppetmon <- Woodmon
+    {0x2D7, 0x2D4},  // SkullMammothmon <- Mammothmon
+    {0x30D, 0x2B1},  // Valkyrimon <- LadyDevimon
+    {0x241, 0x22A},  // MetalEtemon <- Etemon
+    {0x2FA, 0x22A},  // KingEtemon <- Etemon
+    {0x2C1, 0x311},  // Gryphonmon <- Quetzalmon
+    {0x2BE, 0x228},  // Boltmon <- Andromon
+    {0x2E4, 0x36C},  // Piedmon <- Mummymon
+    {0x273, 0x228},  // Machinedramon <- Andromon
+    {0x2EC, 0x042},  // VenomMyotismon <- Myotismon
+    {0x2FB, 0x2E4},  // Apokarimon <- Piedmon
+    {0x338, 0x2DF},  // Ghoulmon <- Phantomon
+    {0x2F7, 0x2DF},  // Creepymon <- Phantomon
+    {0x37E, 0x2E1},  // Armageddemon <- Dragomon
+    {0x366, 0x36C},  // Pharaohmon <- Mummymon
+    {0x351, 0x2B2},  // Zanbamon <- Knightmon
+    {0x364, 0x228},  // HiAndromon <- Andromon
+    {0x3BA, 0x2BE},  // Galacticmon <- Boltmon
+    {0x3BF, 0x014},  // BK00Seraphimon <- Angemon
+    {0x3BB, 0x189},  // BK00MegaGargomon <- Cannondramon
+    {0x3BC, 0x3C2},  // BK00Imperialdramon <- Paildramon
+    {0x3BE, 0x20E},  // BK00KingNumemon <- Monzaemon
+};
+
+// A digivolution condition (16 bytes, as STFGTREP.PRO has them): the form's index + 1; up to two required forms
+// (index + 1) with the level each must have reached; a requirement type (7: partner level) and its value.
+void put_condition(std::vector<uint8_t>& out, uint32_t record_index, int from_record, int from_level, int partner_level) {
+    uint8_t c[16] = {};
+    auto put = [&](int o, uint32_t v, int n) {
+        for (int i = 0; i < n; ++i) c[o + i] = static_cast<uint8_t>(v >> (8 * i));
+    };
+    put(0, record_index + 1, 4);
+    put(4, from_record >= 0 ? static_cast<uint32_t>(from_record) + 1 : 0, 2);
+    put(6, from_record >= 0 ? static_cast<uint32_t>(from_level) : 1, 2);
+    put(10, 1, 2);  // no second form
+    put(12, from_record >= 0 ? 0 : 7, 2);
+    put(14, from_record >= 0 ? 1 : static_cast<uint32_t>(partner_level), 2);
+    out.insert(out.end(), c, c + 16);
+}
+
 // A form record for enemy record `en` (70 bytes), from the game's own form `tpl` of the same stage: the template's
 // stat and resistance totals, spread like the enemy's; the enemy's attack, and its first move as the signature.
 std::vector<uint8_t> make_record(std::span<const uint8_t> tpl, std::span<const uint8_t> en, uint16_t form_id, Stage stage) {
@@ -449,6 +598,30 @@ bool build(psxdisc::Disc& disc, std::span<const uint8_t> exe, Build& out, std::s
         auto rec = make_record(tpl, en, form, stage);
         out.mod.extra_forms.insert(out.mod.extra_forms.end(), rec.begin(), rec.end());
         out.forms.push_back({e.id, form, rd16(en, kEnName), slot, s, stage_index(stage)});
+    }
+
+    // Digivolution conditions of the new forms, in the order of the records. A predecessor that is one of the 8
+    // rookies cannot be a required form (rookies are never learned): the form then needs only a partner level.
+    {
+        std::map<uint16_t, int> record_of;
+        for (uint32_t i = 0; i < forms_table::kOriginalCount; ++i)
+            record_of[rd16(exe.subspan(table + i * forms_table::kRecordSize, 2), 0)] = static_cast<int>(i);
+        for (std::size_t i = 0; i < out.forms.size(); ++i) record_of[out.forms[i].form_id] = static_cast<int>(forms_table::kOriginalCount + i);
+        std::map<uint16_t, uint16_t> line;
+        for (const auto& l : kLines) line[l.form] = l.from;
+        std::vector<uint8_t> conds;
+        for (std::size_t i = 0; i < out.forms.size(); ++i) {
+            const auto& f = out.forms[i];
+            int from = -1;
+            auto lit = line.find(f.form_id);
+            if (lit != line.end()) {
+                auto rit = record_of.find(lit->second);
+                if (rit != record_of.end() && rit->second >= static_cast<int>(forms_table::kRookieCount)) from = rit->second;
+            }
+            static const int kLevel[4] = {3, 10, 25, 40};  // partner level, or level the required form must have reached
+            put_condition(conds, forms_table::kOriginalCount + static_cast<uint32_t>(i), from, kLevel[f.stage], kLevel[f.stage]);
+        }
+        for (auto& c : out.mod.extra_conditions) c = conds;
     }
 
     // New SMDLDATA: the original, then the whole list again with the new entries, then all partner blocks again
