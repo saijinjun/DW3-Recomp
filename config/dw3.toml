@@ -52,7 +52,8 @@ end = 0x800EFDA4
 files = ["AAA/PRO/SDIGIEDT.PRO", "AAA/PRO/SFSTDATA.PRO", "AAA/PRO/SMDLDATA.PRO"]
 
 # The forms table (52 records of 88 bytes at 0x8003EB68: the 8 rookies, then the 44 forms) is read through these
-# 26 base-address loads. They are recompiled to load 0x80002000 instead, in kernel RAM the HLE BIOS leaves unused,
+# 26 base-address loads (27 loads of the high half: at WFIGHTMN 0x800A5DB4 a second one in a branch delay slot
+# reaches the same add). They are recompiled to load 0x80002000 instead, in kernel RAM the HLE BIOS leaves unused,
 # where the host keeps a copy of the table followed by any extra forms (host/include/dw3/forms_table.h). The game's
 # RAM keeps the original instructions, so overlay identification is unaffected.
 [[patch]]
@@ -334,6 +335,12 @@ imm = 0x2000
 [[patch]]
 segment = "WFIGHTMN"
 addr = 0x800A5DB0  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A5DA4  # lui (delay slot of the branch to 0x800A5DB4)
 imm_was = 0x8004
 imm = 0x8000
 

@@ -25,10 +25,11 @@ struct NewForm {
     uint16_t name_index = 0; // index into USDIGNAM (from its enemy stats)
     uint32_t model_file = 0; // file-table index serving its scaled model
     float scale = 1.0f;
+    uint8_t stage = 0;       // 0 rookie, 1 champion, 2 ultimate, 3 mega
 };
 
 struct Build {
-    DiscMod mod;
+    DiscMod mod;  // includes the new forms' records (mod.extra_forms, in the order of `forms`)
     std::vector<NewForm> forms;
     std::vector<std::string> notes;  // Digimon left out and why
 };

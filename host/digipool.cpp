@@ -6,6 +6,7 @@
 #include <map>
 #include <set>
 
+#include "dw3/forms_table.h"
 #include "psxdisc/iso9660.h"
 
 namespace dw3::host::digipool {
@@ -21,8 +22,6 @@ constexpr uint32_t kEnemyStatsSize = 70;         // AAA/PRO/SDIGIEDT.PRO records
 constexpr uint32_t kHiddenRootLba = 473;         // the "AAA" tree, not linked from the ISO root
 constexpr int kPartnerSize = 1450;               // target model extent for the partner camera
 
-// Enemy ids that are boss cores or objects rather than Digimon.
-bool excluded(uint16_t id) { return (id >= 0x1C9 && id <= 0x1D0) || id == 0x1D2 || id == 0x1D3; }
 
 uint32_t rd32(std::span<const uint8_t> b, std::size_t o) {
     return uint32_t{b[o]} | uint32_t{b[o + 1]} << 8 | uint32_t{b[o + 2]} << 16 | uint32_t{b[o + 3]} << 24;
@@ -35,6 +34,210 @@ void wr32(std::vector<uint8_t>& b, std::size_t o, uint32_t v) {
 void wr16(std::vector<uint8_t>& b, std::size_t o, uint16_t v) {
     b[o] = static_cast<uint8_t>(v);
     b[o + 1] = static_cast<uint8_t>(v >> 8);
+}
+
+enum class Stage : uint8_t { Rookie, Champion, Ultimate, Mega };
+
+// Stage of each enemy-only species that becomes a form (canon stages). Species not listed are left out: colour
+// variants of a listed one, enemy versions of the game's own partner forms, and boss cores.
+struct Species {
+    uint16_t id;
+    Stage stage;
+};
+constexpr Species kSpecies[] = {
+    {0x020, Stage::Rookie},  // Kunemon
+    {0x0CE, Stage::Rookie},  // Tapirmon
+    {0x0C5, Stage::Rookie},  // Crabmon
+    {0x084, Stage::Rookie},  // Gizamon
+    {0x0D9, Stage::Rookie},  // DemiDevimon
+    {0x004, Stage::Rookie},  // Betamon
+    {0x019, Stage::Champion},  // Vegiemon
+    {0x033, Stage::Champion},  // Kuwagamon
+    {0x043, Stage::Rookie},  // Yanmamon
+    {0x0C6, Stage::Champion},  // Kiwimon
+    {0x0A6, Stage::Champion},  // Dokugumon
+    {0x050, Stage::Rookie},  // Goburimon
+    {0x115, Stage::Ultimate},  // Baronmon
+    {0x0AC, Stage::Champion},  // Minotarumon
+    {0x089, Stage::Champion},  // Flymon
+    {0x0DE, Stage::Champion},  // Woodmon
+    {0x008, Stage::Champion},  // Tyrannomon
+    {0x0CB, Stage::Ultimate},  // Triceramon
+    {0x007, Stage::Champion},  // Airdramon
+    {0x06E, Stage::Champion},  // Gekomon
+    {0x031, Stage::Champion},  // Coelamon
+    {0x025, Stage::Champion},  // Bakemon
+    {0x0DF, Stage::Ultimate},  // Phantomon
+    {0x032, Stage::Champion},  // Kokatorimon
+    {0x0CF, Stage::Champion},  // Apemon
+    {0x023, Stage::Champion},  // Shellmon
+    {0x0D0, Stage::Champion},  // Tortomon
+    {0x0D2, Stage::Champion},  // Dolphmon
+    {0x0DC, Stage::Champion},  // Gesomon
+    {0x0DD, Stage::Champion},  // Octomon
+    {0x0F1, Stage::Champion},  // Divermon
+    {0x077, Stage::Ultimate},  // ShogunGekomon
+    {0x00A, Stage::Champion},  // Seadramon
+    {0x0D4, Stage::Ultimate},  // Mammothmon
+    {0x02A, Stage::Ultimate},  // Etemon
+    {0x022, Stage::Champion},  // Ogremon
+    {0x088, Stage::Champion},  // Tuskmon
+    {0x06C, Stage::Champion},  // Rockmon
+    {0x111, Stage::Ultimate},  // Quetzalmon
+    {0x01C, Stage::Ultimate},  // Vademon
+    {0x14E, Stage::Ultimate},  // Maildramon
+    {0x00D, Stage::Ultimate},  // Mamemon
+    {0x1B3, Stage::Champion},  // Guardromon
+    {0x0B0, Stage::Champion},  // Thundermon
+    {0x07A, Stage::Rookie},  // Hagurumon
+    {0x08F, Stage::Champion},  // Clockmon
+    {0x028, Stage::Ultimate},  // Andromon
+    {0x00B, Stage::Champion},  // Numemon
+    {0x027, Stage::Champion},  // Sukamon
+    {0x0E3, Stage::Ultimate},  // Garbagemon
+    {0x0AB, Stage::Champion},  // Roachmon
+    {0x08B, Stage::Champion},  // Raremon
+    {0x086, Stage::Champion},  // Cyclonemon
+    {0x036, Stage::Ultimate},  // Megadramon
+    {0x00E, Stage::Ultimate},  // Monzaemon
+    {0x04C, Stage::Champion},  // Tankmon
+    {0x035, Stage::Champion},  // Nanimon
+    {0x0AD, Stage::Champion},  // Musyamon
+    {0x0AF, Stage::Champion},  // Kurisarimon
+    {0x0EE, Stage::Champion},  // Snimon
+    {0x0C8, Stage::Ultimate},  // Blossomon
+    {0x079, Stage::Ultimate},  // Cherrymon
+    {0x12E, Stage::Champion},  // Gargoylemon
+    {0x16C, Stage::Ultimate},  // Mummymon
+    {0x16D, Stage::Ultimate},  // Arukenimon
+    {0x0E2, Stage::Ultimate},  // Okuwamon
+    {0x08C, Stage::Ultimate},  // MetalTyrannomon
+    {0x08A, Stage::Champion},  // Deltamon
+    {0x018, Stage::Champion},  // Whamon
+    {0x0E0, Stage::Ultimate},  // MarineDevimon
+    {0x0E1, Stage::Mega},  // Dragomon
+    {0x03D, Stage::Ultimate},  // MegaSeadramon
+    {0x0A5, Stage::Ultimate},  // Ebidramon
+    {0x0AA, Stage::Champion},  // Vilemon
+    {0x0F4, Stage::Ultimate},  // SkullSatamon
+    {0x07E, Stage::Ultimate},  // Brachiomon
+    {0x026, Stage::Champion},  // Drimogemon
+    {0x045, Stage::Champion},  // Flarerizamon
+    {0x009, Stage::Champion},  // Meramon
+    {0x034, Stage::Champion},  // Mojyamon
+    {0x017, Stage::Champion},  // Frigimon
+    {0x05E, Stage::Champion},  // Icemon
+    {0x029, Stage::Ultimate},  // Giromon
+    {0x10E, Stage::Mega},  // Vikemon
+    {0x147, Stage::Champion},  // Lynxmon
+    {0x0BD, Stage::Ultimate},  // SkullMeramon
+    {0x087, Stage::Champion},  // Devidramon
+    {0x0ED, Stage::Ultimate},  // Kimeramon
+    {0x0E5, Stage::Mega},  // Pukumon
+    {0x0CC, Stage::Mega},  // MetalSeadramon
+    {0x119, Stage::Champion},  // Tylomon
+    {0x0CA, Stage::Ultimate},  // Scorpiomon
+    {0x168, Stage::Ultimate},  // Antylamon
+    {0x03C, Stage::Mega},  // H0MKabuterimon
+    {0x0E7, Stage::Mega},  // Puppetmon
+    {0x0D7, Stage::Mega},  // SkullMammothmon
+    {0x10D, Stage::Mega},  // Valkyrimon
+    {0x0B1, Stage::Ultimate},  // LadyDevimon
+    {0x041, Stage::Mega},  // MetalEtemon
+    {0x0FA, Stage::Mega},  // KingEtemon
+    {0x0C1, Stage::Mega},  // Gryphonmon
+    {0x0F5, Stage::Ultimate},  // Infermon
+    {0x110, Stage::Champion},  // Shadramon
+    {0x0BE, Stage::Mega},  // Boltmon
+    {0x0E4, Stage::Mega},  // Piedmon
+    {0x073, Stage::Mega},  // Machinedramon
+    {0x0EC, Stage::Mega},  // VenomMyotismon
+    {0x0FB, Stage::Mega},  // Apokarimon
+    {0x138, Stage::Mega},  // Ghoulmon
+    {0x0F7, Stage::Mega},  // Creepymon
+    {0x17E, Stage::Mega},  // Armageddemon
+    {0x04D, Stage::Champion},  // RedVegiemon
+    {0x059, Stage::Champion},  // Fugamon
+    {0x068, Stage::Ultimate},  // BlueMeramon
+    {0x166, Stage::Mega},  // Pharaohmon
+    {0x07C, Stage::Ultimate},  // MasterTyrannomon
+    {0x151, Stage::Mega},  // Zanbamon
+    {0x164, Stage::Mega},  // HiAndromon
+    {0x046, Stage::Ultimate},  // WaruMonzaemon
+    {0x08D, Stage::Ultimate},  // Datamon
+    {0x0B2, Stage::Ultimate},  // Knightmon
+    {0x1B4, Stage::Ultimate},  // Bulbmon
+    {0x1B5, Stage::Ultimate},  // Persiamon
+    {0x1B6, Stage::Ultimate},  // Raidenmon
+    {0x1B7, Stage::Ultimate},  // Fujinmon
+    {0x1B8, Stage::Ultimate},  // Suijinmon
+    {0x1B9, Stage::Ultimate},  // Raijinmon
+    {0x1BA, Stage::Mega},  // Galacticmon
+    {0x1BF, Stage::Mega},  // BK00Seraphimon
+    {0x1BB, Stage::Mega},  // BK00MegaGargomon
+    {0x1BC, Stage::Mega},  // BK00Imperialdramon
+    {0x1BD, Stage::Ultimate},  // BK00WarGrowlmon
+    {0x1BE, Stage::Mega},  // BK00KingNumemon
+    {0x1D1, Stage::Mega},  // Vemmon
+};
+
+// The game's own forms by stage, used as templates for the new records.
+constexpr uint16_t kChampions[] = {0x182, 0x103, 0x183, 0x176, 0x14, 0x16F, 0x184, 0x5, 0x104, 0xEA};
+constexpr uint16_t kUltimates[] = {0x186, 0x187, 0x185, 0xD3, 0xC, 0x1B, 0x177, 0x13, 0x38, 0x170, 0xFE, 0x1A, 0x6};
+constexpr uint16_t kMegas[] = {0x188, 0x189, 0x18A, 0xD5, 0x94, 0x171, 0x178, 0xD6, 0xC4, 0x90, 0x10B, 0x3B, 0x42};
+
+// Forms table record (88 bytes): id; str, def, spt, wis, spd, chr; 7 resistances (fire, water, ice, wind, thunder,
+// machine, dark); attack; 5 techs; signature tech; DNA tech; ...; DNA partner index at +0x3D; name index at +0x55.
+constexpr std::size_t kRecStats = 2, kRecRes = 0x0E, kRecAttack = 0x1C, kRecSignature = 0x28, kRecDnaTech = 0x2A,
+                      kRecDnaIndex = 0x3D, kRecName = 0x55;
+// Enemy stats record (70 bytes): id, drop item, drop rate, name index, attack, move 1, move 2, str, def, spt, wis,
+// spd, 7 resistances, ...
+constexpr std::size_t kEnName = 6, kEnAttack = 8, kEnMove1 = 10, kEnStats = 14, kEnRes = 24;
+
+std::span<const uint16_t> templates_for(Stage s) {
+    switch (s) {
+        case Stage::Ultimate: return kUltimates;
+        case Stage::Mega: return kMegas;
+        default: return kChampions;
+    }
+}
+
+uint8_t stage_index(Stage s) { return static_cast<uint8_t>(s); }
+
+// Index of the highest of `n` signed 16-bit values at `o`.
+int highest(std::span<const uint8_t> b, std::size_t o, int n) {
+    int best = 0;
+    for (int i = 1; i < n; ++i)
+        if (rds16(b, o + 2 * i) > rds16(b, o + 2 * best)) best = i;
+    return best;
+}
+
+// A form record for enemy record `en` (70 bytes), from the game's own form `tpl` of the same stage: the template's
+// stat and resistance totals, spread like the enemy's; the enemy's attack, and its first move as the signature.
+std::vector<uint8_t> make_record(std::span<const uint8_t> tpl, std::span<const uint8_t> en, uint16_t form_id, Stage stage) {
+    std::vector<uint8_t> r(tpl.begin(), tpl.end());
+    wr16(r, 0, form_id);
+    auto spread = [&](std::size_t dst, std::size_t src, int n, float scale, long hi) {
+        long tsum = 0, esum = 0;
+        for (int i = 0; i < n; ++i) {
+            tsum += rd16(tpl, dst + 2 * i);
+            esum += std::max<int>(0, rds16(en, src + 2 * i));
+        }
+        if (esum == 0) return;
+        for (int i = 0; i < n; ++i) {
+            float v = static_cast<float>(tsum) * scale * static_cast<float>(std::max<int>(0, rds16(en, src + 2 * i))) /
+                      static_cast<float>(esum);
+            wr16(r, dst + 2 * i, static_cast<uint16_t>(std::clamp<long>(std::lround(v / 5.0f) * 5, 0, hi)));
+        }
+    };
+    spread(kRecStats, kEnStats, 5, stage == Stage::Rookie ? 0.7f : 1.0f, 999);
+    spread(kRecRes, kEnRes, 7, 1.0f, 150);
+    wr16(r, kRecAttack, rd16(en, kEnAttack));
+    if (uint16_t m = rd16(en, kEnMove1)) wr16(r, kRecSignature, m);
+    wr16(r, kRecDnaTech, 0);  // no DNA digivolution for the new forms
+    r[kRecDnaIndex] = 0;
+    r[kRecName] = static_cast<uint8_t>(rd16(en, kEnName));
+    return r;
 }
 
 // Offsets of the sub-files of a packed file (offset table up to the first sub-file).
@@ -166,11 +369,24 @@ bool build(psxdisc::Disc& disc, std::span<const uint8_t> exe, Build& out, std::s
         error = "no donor partner entry";
         return false;
     }
-    std::map<uint16_t, uint16_t> name_of;
+    std::map<uint16_t, std::size_t> stats_at;
     for (std::size_t o = 0; o + kEnemyStatsSize <= stats.size(); o += kEnemyStatsSize) {
         uint16_t id = rd16(stats, o);
         if (id == 0) break;
-        name_of.emplace(id, rd16(stats, o + 6));
+        stats_at.emplace(id, o);
+    }
+    std::map<uint16_t, Stage> stage_of;
+    for (const auto& sp : kSpecies) stage_of.emplace(sp.id, sp.stage);
+    // The game's own forms, as templates for the new records.
+    const std::size_t table = forms_table::kOriginal - kExeLoadAddress + kExeHeaderSize;
+    if (exe.size() < table + forms_table::kOriginalCount * forms_table::kRecordSize) {
+        error = "forms table not found";
+        return false;
+    }
+    std::map<uint16_t, std::span<const uint8_t>> own_form;
+    for (uint32_t i = 0; i < forms_table::kOriginalCount; ++i) {
+        auto rec = exe.subspan(table + i * forms_table::kRecordSize, forms_table::kRecordSize);
+        own_form.emplace(rd16(rec, 0), rec);
     }
 
     std::vector<Entry> added;
@@ -178,7 +394,9 @@ bool build(psxdisc::Disc& disc, std::span<const uint8_t> exe, Build& out, std::s
     std::size_t next_spare = 0;
     std::set<uint16_t> seen;
     for (const auto& e : entries) {
-        if (e.kind < kFirstEnemyKind || partner_ids.count(e.id) || excluded(e.id) || !seen.insert(e.id).second) continue;
+        if (e.kind < kFirstEnemyKind || partner_ids.count(e.id) || !stage_of.count(e.id) || !stats_at.count(e.id) ||
+            !seen.insert(e.id).second)
+            continue;
         std::size_t eb = hdr[3] + std::size_t{e.idx} * kEnemyBlockSize;
         if (eb + kEnemyBlockSize > smdl.size()) continue;
         uint16_t header_sub = rd16(smdl, eb), model_file = rd16(smdl, eb + 2);
@@ -212,8 +430,26 @@ bool build(psxdisc::Disc& disc, std::span<const uint8_t> exe, Build& out, std::s
         added_blocks.insert(added_blocks.end(), block.begin(), block.end());
         uint16_t form = form_id_for(e.id);
         added.push_back({form, static_cast<uint8_t>(partner_blocks + added.size()), donor->kind});
-        auto nm = name_of.find(e.id);
-        out.forms.push_back({e.id, form, nm == name_of.end() ? uint16_t{0} : nm->second, slot, s});
+        auto en = std::span<const uint8_t>(stats).subspan(stats_at[e.id], kEnemyStatsSize);
+        Stage stage = stage_of[e.id];
+        // Template: an own form of the same stage and element (highest resistance), else the first of the stage.
+        std::span<const uint8_t> tpl;
+        for (uint16_t t : templates_for(stage)) {
+            auto it = own_form.find(t);
+            if (it == own_form.end()) continue;
+            if (tpl.empty()) tpl = it->second;
+            if (highest(it->second, kRecRes, 7) == highest(en, kEnRes, 7)) {
+                tpl = it->second;
+                break;
+            }
+        }
+        if (tpl.empty()) {
+            error = "no template form";
+            return false;
+        }
+        auto rec = make_record(tpl, en, form, stage);
+        out.mod.extra_forms.insert(out.mod.extra_forms.end(), rec.begin(), rec.end());
+        out.forms.push_back({e.id, form, rd16(en, kEnName), slot, s, stage_index(stage)});
     }
 
     // New SMDLDATA: the original, then the whole list again with the new entries, then all partner blocks again

@@ -137,7 +137,8 @@ TEST(Digipool, BuildsPartnerFormsFromTheRealDisc) {
     digipool::Build b;
     std::string error;
     ASSERT_TRUE(digipool::build(dw3test::game_cue().string(), b, error)) << error;
-    EXPECT_GE(b.forms.size(), 180u);
+    EXPECT_GE(b.forms.size(), 130u);
+    EXPECT_EQ(b.mod.extra_forms.size(), b.forms.size() * 88);
     ASSERT_TRUE(b.mod.files.count(446));  // SMDLDATA.PRO
     for (const auto& f : b.forms) {
         EXPECT_EQ(f.form_id, digipool::form_id_for(f.enemy_id));
@@ -145,5 +146,10 @@ TEST(Digipool, BuildsPartnerFormsFromTheRealDisc) {
         EXPECT_TRUE(b.mod.files.count(f.model_file));
         EXPECT_GT(f.scale, 0.02f);
         EXPECT_LE(f.scale, 1.0f);
+    }
+    for (std::size_t i = 0; i < b.forms.size(); ++i) {
+        const uint8_t* r = b.mod.extra_forms.data() + 88 * i;
+        EXPECT_EQ(r[0] | r[1] << 8, b.forms[i].form_id);
+        EXPECT_EQ(r[0x55], b.forms[i].name_index);
     }
 }
