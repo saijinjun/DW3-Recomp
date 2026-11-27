@@ -39,6 +39,17 @@ constexpr uint32_t kEquippedOffset = 0x48;  // 3 x s16
 constexpr uint32_t kTotalSlots = kGameSlots + kExtSlots;
 constexpr uint32_t kSlotCallback = 0x8005C448u;  // function pointer called with the id of a newly learned form
 uint32_t g_page = 0;
+Machine* g_machine = nullptr;
+
+// The page of learned forms the lists show: pad 1 held L2 = 1, R2 = 2, L2+R2 = 3, L1 = 4 (none = the game's own 44).
+uint32_t pad_page() {
+    if (!g_machine) return g_page;
+    PadSource* pad = g_machine->sio().pad_source(0);
+    if (!pad) return g_page;
+    uint16_t b = pad->buttons(0);
+    if (b & kPadL1) return 4;
+    return ((b & kPadL2) ? 1u : 0u) | ((b & kPadR2) ? 2u : 0u);
+}
 
 uint8_t* slot_ptr(RecompContext* ctx, uint32_t p, uint32_t k) {
     if (k < kGameSlots) return ctx->ram + phys(kRoster + p * kRosterSize + kSlotOffset + k * kSlotSize);
@@ -93,6 +104,7 @@ void learned_set_equipped(RecompContext* ctx) {
 // 80017534: the learned ids into out[44] (zero padded): the window of the learned list for the current page.
 void learned_list(RecompContext* ctx) {
     uint32_t p = ctx->r[4], out = ctx->r[5], seen = 0, n = 0;
+    g_page = pad_page();
     for (uint32_t k = 0; k < slots_for(p); ++k) {
         int16_t id = slot_id(ctx, p, k);
         if (id < 3) continue;
@@ -184,6 +196,7 @@ void attach(Machine& machine, std::vector<uint8_t> extra_records, std::vector<ui
                 std::memcpy(dst + i * kDvConditionSize, dst, kDvConditionSize);
         }
     }
+    g_machine = &machine;
     machine.override_function(kLookupIndex, &lookup_index);
     machine.override_function(kLookupRecord, &lookup_record);
     machine.override_function(0x80017348u, &learned_equipped);

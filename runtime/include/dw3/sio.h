@@ -87,6 +87,7 @@ public:
 
     // Pad source per port (null = nothing plugged). Not owned.
     void set_pad_source(int port, PadSource* src) { pads_[port & 1] = src; }
+    PadSource* pad_source(int port) const { return pads_[port & 1]; }
 
     // Memory card storage per slot, exactly kCardSize bytes (not owned; the caller may back it with a file).
     // Returns false (and leaves the slot untouched) on a wrong size. A fresh card reports FLAG 0x08 until the
