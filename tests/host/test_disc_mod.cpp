@@ -6,6 +6,8 @@
 
 #include "dw3/digipool.h"
 #include "dw3/disc_mod.h"
+#include "dw3/forms_table.h"
+#include "psxdisc/iso9660.h"
 #include "game_disc.h"
 
 using namespace dw3::host;
@@ -152,4 +154,25 @@ TEST(Digipool, BuildsPartnerFormsFromTheRealDisc) {
         EXPECT_EQ(r[0] | r[1] << 8, b.forms[i].form_id);
         EXPECT_EQ(r[0x55], b.forms[i].name_index);
     }
+}
+
+TEST(FormsTable, ReadsTheGameDigivolutionConditions) {
+    DW3_REQUIRE_DISC();
+    auto disc = psxdisc::Disc::open(dw3test::game_cue().string());
+    ASSERT_TRUE(disc);
+    auto root = psxdisc::read_root(*disc);
+    ASSERT_TRUE(root);
+    std::vector<uint8_t> exe;
+    for (const auto& f : psxdisc::walk(*disc, root->lba, root->size))
+        if (f.path == "SLUS_014.36") exe = disc->read_file(f.lba, f.size);
+    auto idx = game_file_index(*disc, exe, "AAA/PRO/STFGTREP.PRO");
+    ASSERT_TRUE(idx);
+    auto c = forms_table::original_conditions(read_game_file(*disc, exe, *idx));
+    ASSERT_EQ(c.size(), forms_table::kRookieCount * forms_table::kOriginalConditionCount * forms_table::kDvConditionSize);
+    for (uint32_t r = 0; r < forms_table::kRookieCount; ++r)
+        for (uint32_t i = 0; i < forms_table::kOriginalConditionCount; ++i) {
+            uint32_t index = get32(c, (r * forms_table::kOriginalConditionCount + i) * forms_table::kDvConditionSize);
+            EXPECT_GE(index, 9u);   // form records 8..51, plus one
+            EXPECT_LE(index, 52u);
+        }
 }

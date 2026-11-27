@@ -19,7 +19,6 @@ constexpr uint32_t kEnemyBlockSize = 72;
 constexpr uint8_t kFirstEnemyKind = 58;
 constexpr uint16_t kDonorId = 0x17F;             // Kotemon: its partner block is the template for new ones
 constexpr uint32_t kEnemyStatsSize = 70;         // AAA/PRO/SDIGIEDT.PRO records
-constexpr uint32_t kHiddenRootLba = 473;         // the "AAA" tree, not linked from the ISO root
 constexpr int kPartnerSize = 1450;               // target model extent for the partner camera
 
 

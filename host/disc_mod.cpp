@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "psxdisc/iso9660.h"
+
 namespace dw3::host {
 
 namespace {
@@ -61,6 +63,16 @@ std::vector<uint8_t> read_game_file(psxdisc::Disc& disc, std::span<const uint8_t
     uint32_t lba = game_file_lba(exe, index);
     uint32_t sectors = rd16(exe, exe_offset(kFileTableAddress) + 4 * kFileCount + 2 * index);
     return disc.read_file(lba, sectors * 2048);
+}
+
+std::optional<uint32_t> game_file_index(psxdisc::Disc& disc, std::span<const uint8_t> exe, const std::string& path) {
+    uint32_t lba = UINT32_MAX;
+    for (const auto& f : psxdisc::walk(disc, kHiddenRootLba, psxdisc::kForm1DataSize, "AAA/"))
+        if (f.path == path) lba = f.lba;
+    if (lba == UINT32_MAX) return std::nullopt;
+    for (uint32_t i = 0; i < kFileCount; ++i)
+        if (game_file_lba(exe, i) == lba) return i;
+    return std::nullopt;
 }
 
 std::string apply_disc_mod(const DiscMod& mod, std::vector<uint8_t>& exe, ModSectorSource& src) {

@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -21,6 +22,8 @@ constexpr uint32_t kExeLoadAddress = 0x80010000u;
 constexpr uint32_t kExeHeaderSize = 0x800u;
 constexpr uint32_t kFileTableAddress = 0x80044B78u;
 constexpr uint32_t kFileCount = 2199;
+// The "AAA" directory tree, which the ISO root does not link to.
+constexpr uint32_t kHiddenRootLba = 473;
 
 struct DiscMod {
     // New contents for entries of the game's file table, by index.
@@ -29,8 +32,15 @@ struct DiscMod {
     std::map<uint32_t, std::vector<uint8_t>> exe_patches;
     // Forms added after the game's own in the forms table (whole 88-byte records, see forms_table.h).
     std::vector<uint8_t> extra_forms;
+    // Digivolution conditions for the added forms, per rookie (whole 16-byte entries, see forms_table.h).
+    std::vector<uint8_t> extra_conditions[8];
 
-    bool empty() const { return files.empty() && exe_patches.empty() && extra_forms.empty(); }
+    bool empty() const {
+        if (!files.empty() || !exe_patches.empty() || !extra_forms.empty()) return false;
+        for (const auto& c : extra_conditions)
+            if (!c.empty()) return false;
+        return true;
+    }
 };
 
 // Serves the disc, plus the replaced files as Mode 2 Form 1 sectors from `first_lba` on.
@@ -55,5 +65,7 @@ std::string apply_disc_mod(const DiscMod& mod, std::vector<uint8_t>& exe, ModSec
 // Reads entry `index` of the game's file table straight from the disc, using the table in `exe`.
 std::vector<uint8_t> read_game_file(psxdisc::Disc& disc, std::span<const uint8_t> exe, uint32_t index);
 uint32_t game_file_lba(std::span<const uint8_t> exe, uint32_t index);
+// Index in the game's file table of the file at `path` in the AAA tree (e.g. "AAA/PRO/STFGTREP.PRO").
+std::optional<uint32_t> game_file_index(psxdisc::Disc& disc, std::span<const uint8_t> exe, const std::string& path);
 
 }  // namespace dw3::host

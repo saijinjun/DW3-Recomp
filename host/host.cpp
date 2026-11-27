@@ -261,7 +261,18 @@ std::unique_ptr<Host> Host::create(const Config& cfg, std::string& error) {
         source = im.mod_source.get();
     }
     m.cdrom().set_disc(source);
-    forms_table::attach(m, cfg.disc_mod ? cfg.disc_mod->extra_forms : std::vector<uint8_t>{});
+    {
+        std::vector<uint8_t> conditions;
+        if (auto f = game_file_index(*h->disc_, h->exe_, "AAA/PRO/STFGTREP.PRO"))
+            conditions = forms_table::original_conditions(read_game_file(*h->disc_, h->exe_, *f));
+        if (conditions.empty()) {
+            error = "digivolution conditions not found on the disc";
+            return nullptr;
+        }
+        static const std::vector<uint8_t> kNone[forms_table::kRookieCount];
+        forms_table::attach(m, cfg.disc_mod ? cfg.disc_mod->extra_forms : std::vector<uint8_t>{}, std::move(conditions),
+                            cfg.disc_mod ? cfg.disc_mod->extra_conditions : kNone);
+    }
     m.kernel_idle = [self]() { return self->bios_->host_depth() == 0; };
     m.spu().start(m.scheduler());  // timed sample generation (a periodic event; plain Machine tests stay quiet)
 
