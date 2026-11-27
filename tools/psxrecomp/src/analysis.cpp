@@ -14,6 +14,11 @@ uint32_t CodeSegment::word(uint32_t addr) const {
            (static_cast<uint32_t>(bytes[o + 2]) << 16) | (static_cast<uint32_t>(bytes[o + 3]) << 24);
 }
 
+uint32_t CodeSegment::code(uint32_t addr) const {
+    auto it = patches.find(addr);
+    return it != patches.end() ? it->second : word(addr);
+}
+
 bool match_bios_stub(const CodeSegment& seg, uint32_t start, uint8_t& table, uint8_t& fn) {
     // addiu t2,zero,0xA0 ; jr t2 ; addiu t1,zero,N
     uint32_t w0 = seg.word(start), w1 = seg.word(start + 4), w2 = seg.word(start + 8);
@@ -79,7 +84,7 @@ std::optional<uint32_t> Analyzer::const_base(uint32_t reg, uint32_t before, int 
     if (reg == 0) return 0u;
     if (depth > 6) return std::nullopt;
     for (uint32_t pc = before - 4, n = 0; n < 256 && pc >= seg_.base; pc -= 4, ++n) {
-        Instruction i = decode(seg_.word(pc), pc);
+        Instruction i = decode(seg_.code(pc), pc);
         if (i.dest_gpr() != reg) continue;
         switch (i.op) {
             case Op::LUI: return i.uimm << 16;
@@ -105,7 +110,7 @@ std::optional<uint32_t> Analyzer::exact_const(uint32_t reg, uint32_t before, uin
     if (reg == 0) return 0u;
     if (depth > 4) return std::nullopt;
     for (uint32_t pc = before - 4, n = 0; n < 16 && pc >= floor; pc -= 4, ++n) {
-        Instruction i = decode(seg_.word(pc), pc);
+        Instruction i = decode(seg_.code(pc), pc);
         if (i.dest_gpr() != reg) continue;
         switch (i.op) {
             case Op::LUI: return i.uimm << 16;
@@ -125,11 +130,11 @@ std::optional<uint32_t> Analyzer::exact_const(uint32_t reg, uint32_t before, uin
 // `lw reg, N(sp)` back to the nearest `sw rX, N(sp)` and resolves rX as a table base.
 std::optional<uint32_t> Analyzer::spilled_base(const Function& f, uint32_t lw_pc, uint32_t reg) const {
     for (uint32_t pc = lw_pc - 4, n = 0; n < 16 && pc >= f.start; pc -= 4, ++n) {
-        Instruction i = decode(seg_.word(pc), pc);
+        Instruction i = decode(seg_.code(pc), pc);
         if (i.dest_gpr() != reg) continue;
         if (i.op != Op::LW || i.rs != 29) return std::nullopt;
         for (uint32_t sp = pc - 4, m = 0; m < 512 && sp >= f.start; sp -= 4, ++m) {
-            Instruction st = decode(seg_.word(sp), sp);
+            Instruction st = decode(seg_.code(sp), sp);
             if (st.op == Op::SW && st.rs == 29 && st.simm == i.simm) return const_base(st.rt, sp, 0);
         }
         return std::nullopt;
@@ -142,7 +147,7 @@ std::optional<PointerJump> Analyzer::recover_pointer_jump(const Function& f, uin
     PointerJump pj;
     pj.jr_addr = jr_pc;
     for (uint32_t pc = jr_pc - 4, n = 0; n < 16 && pc >= f.start; pc -= 4, ++n) {
-        Instruction i = decode(seg_.word(pc), pc);
+        Instruction i = decode(seg_.code(pc), pc);
         if (i.dest_gpr() != reg) continue;
         if (i.op == Op::LW) {
             auto base = exact_const(i.rs, pc, f.start, 0);
@@ -165,7 +170,7 @@ std::optional<JumpTable> Analyzer::recover_jump_table(const Function& f, uint32_
     uint32_t lw_pc = 0;
     Instruction lw;
     for (uint32_t pc = jr_pc - 4, n = 0; n < 16 && pc >= f.start; pc -= 4, ++n) {
-        Instruction i = decode(seg_.word(pc), pc);
+        Instruction i = decode(seg_.code(pc), pc);
         if (i.dest_gpr() == reg) {
             if (i.op != Op::LW) return std::nullopt;
             lw = i;
@@ -185,7 +190,7 @@ std::optional<JumpTable> Analyzer::recover_jump_table(const Function& f, uint32_
     // Bound from a preceding "sltiu rX, idx, N".
     uint32_t count = 0;
     for (uint32_t pc = lw_pc - 4, n = 0; n < 32 && pc >= f.start; pc -= 4, ++n) {
-        Instruction i = decode(seg_.word(pc), pc);
+        Instruction i = decode(seg_.code(pc), pc);
         if (i.op == Op::SLTIU) {
             count = i.uimm;
             break;
@@ -201,7 +206,7 @@ std::optional<JumpTable> Analyzer::recover_jump_table(const Function& f, uint32_
         if (!seg_.contains(a)) break;
         uint32_t t = seg_.word(a);
         if (!in_code(t) || (t & 3) || t < f.start || (!bounded && t >= limit) ||
-            decode(seg_.word(t), t).op == Op::Invalid) {
+            decode(seg_.code(t), t).op == Op::Invalid) {
             if (bounded) return std::nullopt;  // bounded table with a bad entry: not a table
             break;
         }
@@ -248,7 +253,7 @@ Function Analyzer::trace(uint32_t start) const {
                 f.tail_calls.insert(pc);
                 break;
             }
-            Instruction i = decode(seg_.word(pc), pc);
+            Instruction i = decode(seg_.code(pc), pc);
             if (i.op == Op::Invalid) {
                 f.errors.push_back("invalid instruction at " + hex(pc));
                 break;
@@ -261,7 +266,7 @@ Function Analyzer::trace(uint32_t start) const {
             visit(pc);
             flowed.insert(pc);
             if (i.has_delay_slot()) {
-                Instruction ds = decode(seg_.word(pc + 4), pc + 4);
+                Instruction ds = decode(seg_.code(pc + 4), pc + 4);
                 if (ds.op == Op::Invalid) {
                     f.errors.push_back("invalid delay slot at " + hex(pc + 4));
                     break;
@@ -412,7 +417,7 @@ void Analyzer::gap_fill() {
                 // Leaf function: start after the last non-instruction word (data) since the boundary.
                 uint32_t leaf = boundary;
                 for (uint32_t a = boundary; a < r; a += 4)
-                    if (decode(seg_.word(a), a).op == Op::Invalid || is_pointer_word(seg_.word(a))) leaf = a + 4;
+                    if (decode(seg_.code(a), a).op == Op::Invalid || is_pointer_word(seg_.word(a))) leaf = a + 4;
                 while (leaf < r && seg_.word(leaf) == 0) leaf += 4;
                 if (leaf != cand) try_accept(leaf, gap_end, r);
             }

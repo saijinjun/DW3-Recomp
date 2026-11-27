@@ -27,8 +27,10 @@ struct DiscMod {
     std::map<uint32_t, std::vector<uint8_t>> files;
     // Byte patches to the executable's loaded image, by RAM address (applied before the file table changes).
     std::map<uint32_t, std::vector<uint8_t>> exe_patches;
+    // Forms added after the game's own in the forms table (whole 88-byte records, see forms_table.h).
+    std::vector<uint8_t> extra_forms;
 
-    bool empty() const { return files.empty() && exe_patches.empty(); }
+    bool empty() const { return files.empty() && exe_patches.empty() && extra_forms.empty(); }
 };
 
 // Serves the disc, plus the replaced files as Mode 2 Form 1 sectors from `first_lba` on.

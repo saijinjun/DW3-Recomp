@@ -50,3 +50,320 @@ end = 0x800EFDA4
 # No internal calls or pointers: treated as data, not recompiled. Verify with a runtime trace.
 [overlay_data]
 files = ["AAA/PRO/SDIGIEDT.PRO", "AAA/PRO/SFSTDATA.PRO", "AAA/PRO/SMDLDATA.PRO"]
+
+# The forms table (52 records of 88 bytes at 0x8003EB68: the 8 rookies, then the 44 forms) is read through these
+# 26 base-address loads. They are recompiled to load 0x80002000 instead, in kernel RAM the HLE BIOS leaves unused,
+# where the host keeps a copy of the table followed by any extra forms (host/include/dw3/forms_table.h). The game's
+# RAM keeps the original instructions, so overlay identification is unaffected.
+[[patch]]
+segment = "MAIN"
+addr = 0x80013488  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "MAIN"
+addr = 0x8001348C  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "MAIN"
+addr = 0x800134F0  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "MAIN"
+addr = 0x800134F4  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "MAIN"
+addr = 0x80016950  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "MAIN"
+addr = 0x80016954  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x800886B0  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x800886B8  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x80093868  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x8009386C  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x80094400  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x80094404  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x80095B60  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x80095B64  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x80096290  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x80096294  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x80097440  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x80097444  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x8009DE84  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x8009DE88  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x800A049C  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "FIGHTSTG"
+addr = 0x800A04B4  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "STFGTREP"
+addr = 0x80085580  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "STFGTREP"
+addr = 0x80085584  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "STFGTREP"
+addr = 0x800858C4  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "STFGTREP"
+addr = 0x800858C8  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "STFGTREP"
+addr = 0x80085A44  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "STFGTREP"
+addr = 0x80085A4C  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "STGTRAIN"
+addr = 0x80085B3C  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "STGTRAIN"
+addr = 0x80085B44  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "STSTATUS"
+addr = 0x80087EA4  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "STSTATUS"
+addr = 0x80087EA8  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "STSTATUS"
+addr = 0x800884C0  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "STSTATUS"
+addr = 0x800884C4  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "STSTATUS"
+addr = 0x80088B2C  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "STSTATUS"
+addr = 0x80088B30  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "STSTATUS"
+addr = 0x80088F4C  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "STSTATUS"
+addr = 0x80088F50  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "STSTATUS"
+addr = 0x8008A6EC  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "STSTATUS"
+addr = 0x8008A6F0  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A5558  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A5560  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A58F8  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A58FC  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A5D38  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A5D3C  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A5DB0  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A5DB4  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A7B80  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A7B84  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A84F4  # lui
+imm_was = 0x8004
+imm = 0x8000
+
+[[patch]]
+segment = "WFIGHTMN"
+addr = 0x800A84F8  # addiu
+imm_was = 0xEB68
+imm = 0x2000
+

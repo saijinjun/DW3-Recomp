@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "dw3/disc_ref.h"
+#include "dw3/forms_table.h"
 #include "dw3/memcard.h"
 #include "dw3/recomp.h"
 #include "dw3/platform.h"
@@ -260,6 +261,7 @@ std::unique_ptr<Host> Host::create(const Config& cfg, std::string& error) {
         source = im.mod_source.get();
     }
     m.cdrom().set_disc(source);
+    forms_table::attach(m, cfg.disc_mod ? cfg.disc_mod->extra_forms : std::vector<uint8_t>{});
     m.kernel_idle = [self]() { return self->bios_->host_depth() == 0; };
     m.spu().start(m.scheduler());  // timed sample generation (a periodic event; plain Machine tests stay quiet)
 
@@ -389,6 +391,7 @@ void Host::apply(std::span<const uint8_t> payload) {
     }
     machine_->io(s);
     bios_->io(s);
+    forms_table::install(*machine_);
 }
 
 void Host::save_state(std::function<void(std::vector<uint8_t>, const std::string&)> done) {
@@ -499,6 +502,7 @@ RunResult Host::run(std::function<void(uint64_t frame)> frame_hook) {
                     machine_->resume();
                 } else {
                     uint32_t entry = bios_->load_exe(exe_);
+                    forms_table::install(*machine_);
                     bios_->run(entry);
                 }
                 break;
