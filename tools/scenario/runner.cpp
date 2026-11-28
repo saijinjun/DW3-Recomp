@@ -71,6 +71,7 @@ struct Options {
     int stats_width = 1920, stats_height = 1080;  // --frame-stats-size WxH: the output size drawn for the stats
     int64_t frames_from = 0, frames_to = -1, frames_step = 1;  // --gpu-frames FROM:TO[:STEP]:DIR: rendered frames in that range of emulated frames as BMPs
     std::string frames_dir;
+    std::string card_out;  // --card-out PATH: write the memory card in slot 1 at the end of the run
     bool more_digimon = false;  // --more-digimon: serve the extra partner forms built from the disc (digipool.h)
     bool no_xa = false;  // --no-xa: drop XA-ADPCM sectors (isolates SPU voice output when auditing)
 };
@@ -358,6 +359,7 @@ int main(int argc, char** argv) {
         else if (a == "--wav" && i + 1 < argc) opt.wav = argv[++i];
         else if (a == "--no-xa") opt.no_xa = true;
         else if (a == "--more-digimon") opt.more_digimon = true;
+        else if (a == "--card-out" && i + 1 < argc) opt.card_out = argv[++i];
         else if (a == "--setting" && i + 1 < argc) opt.settings.push_back(argv[++i]);
         else if (a == "--gpu") opt.gpu = true;
         else if (a == "--sync-replacements") opt.sync_replacements = true;
@@ -993,6 +995,14 @@ int main(int argc, char** argv) {
         std::printf("  frame-stats replacement images loaded %llu, %.1f ms total on the render thread, GPU waits %.1f ms, submits %.1f ms\n",
                     static_cast<unsigned long long>(hw->stats().replacement_loads), static_cast<double>(hw->stats().replacement_ns) / 1e6,
                     static_cast<double>(hw->stats().gpu_wait_ns) / 1e6, static_cast<double>(hw->stats().submit_ns) / 1e6);
+    if (!opt.card_out.empty() && host) {
+        const auto& card = host->card_image(0);
+        if (std::FILE* f = std::fopen(opt.card_out.c_str(), "wb")) {
+            std::fwrite(card.data(), 1, card.size(), f);
+            std::fclose(f);
+            std::printf("  wrote memory card (%zu bytes) to %s\n", card.size(), opt.card_out.c_str());
+        }
+    }
     std::printf("%s %s: %d passed, %d failed, %lld frames in %.1fs\n", ok ? "PASS" : "FAIL", scenario.name.c_str(),
                 total.pass, total.fail, static_cast<long long>(last_frame), secs);
     return ok ? 0 : 1;
