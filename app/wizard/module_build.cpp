@@ -18,6 +18,13 @@ namespace dw3setup {
 
 namespace {
 
+// What the compiler said (or why it could not start), for the message of a failed step.
+std::string failure_detail() {
+    std::string d = last_process_detail();
+    while (!d.empty() && (d.back() == '\n' || d.back() == ' ')) d.pop_back();
+    return d.empty() ? std::string() : " " + d;
+}
+
 constexpr const char* kCompilerName =
 #if defined(DW3_OS_windows)
     "zig.exe";
@@ -125,7 +132,7 @@ bool ModulePreparer::compile_all(const fs::path& dir, const std::vector<std::str
             if (code != 0) {
                 std::lock_guard<std::mutex> lock(error_mutex);
                 if (!failed.exchange(true))
-                    error = code == kProcessCancelled ? "" : "The compiler failed on " + sources[i] + " (exit code " + std::to_string(code) + ").";
+                    error = code == kProcessCancelled ? "" : "The compiler failed on " + sources[i] + " (exit code " + std::to_string(code) + ")." + failure_detail();
                 return;
             }
             const std::size_t n = done.fetch_add(1) + 1;
@@ -193,11 +200,11 @@ PrepareResult ModulePreparer::run() {
     // module_entry.c (and any other support source) comes with the toolchain; build it beside the generated sources.
     {
         const fs::path entry_object = dir / "obj" / "module_entry.c.o";
-        if (config_.run(compile_command(config_.toolchain.module_entry, entry_object), cancel_) != 0) return fail("The compiler failed on the module entry point.");
+        if (config_.run(compile_command(config_.toolchain.module_entry, entry_object), cancel_) != 0) return fail("The compiler failed on the module entry point." + failure_detail());
         objects.push_back(entry_object);
         for (const fs::path& extra : config_.toolchain.extra_sources) {
             const fs::path extra_object = dir / "obj" / (extra.filename().string() + ".o");
-            if (config_.run(compile_command(extra, extra_object), cancel_) != 0) return fail("The compiler failed on " + utf8(extra.filename()) + ".");
+            if (config_.run(compile_command(extra, extra_object), cancel_) != 0) return fail("The compiler failed on " + utf8(extra.filename()) + "." + failure_detail());
             objects.push_back(extra_object);
         }
     }
