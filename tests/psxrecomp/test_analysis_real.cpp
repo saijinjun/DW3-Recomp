@@ -22,7 +22,7 @@ std::optional<CodeSegment> load_main() {
     std::vector<uint8_t> bytes{std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
     auto exe = psxdisc::parse_psxexe(bytes);
     if (!exe) return std::nullopt;
-    return CodeSegment{"MAIN", exe->text_addr, exe->text};
+    return CodeSegment{"MAIN", exe->text_addr, exe->text, {}};
 }
 
 class RealMain : public ::testing::Test {

@@ -1,6 +1,7 @@
 #include "psxrecomp/pipeline.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <fstream>
 
 #include "psxdisc/disc.h"
@@ -101,7 +102,7 @@ bool Game::load(const toml::table& cfg, const FileSource& source, std::string& e
             return false;
         }
         SegmentJob j;
-        j.seg = {"MAIN", exe->text_addr, exe->text};
+        j.seg = {"MAIN", exe->text_addr, exe->text, {}};
         j.cfg.entries.push_back(exe->pc);
         j.cfg.code_end = cfg["exe"]["code_end"].value_or(0u);
         if (auto* arr = cfg["exe"]["functions"].as_array())
@@ -120,13 +121,35 @@ bool Game::load(const toml::table& cfg, const FileSource& source, std::string& e
                     for (auto& f : source.expand(v.value_or(std::string()))) files.push_back(f);
             for (const auto& f : files) {
                 SegmentJob j;
-                j.seg = {fs::path(f).stem().string(), base, source.read(f)};
+                j.seg = {fs::path(f).stem().string(), base, source.read(f), {}};
                 if (j.seg.bytes.empty()) {
                     error = "missing overlay " + f;
                     return false;
                 }
                 jobs_.push_back(std::move(j));
             }
+        }
+    }
+    // [[patch]] segment = "MAIN" | overlay stem, addr: recompile the instruction there with its 16-bit immediate
+    // `imm` instead of `imm_was` (checked against the game's instruction).
+    if (auto* patches = cfg["patch"].as_array()) {
+        for (auto& node : *patches) {
+            auto& p = *node.as_table();
+            std::string seg = p["segment"].value_or(std::string());
+            uint32_t addr = p["addr"].value_or(0u), imm_was = p["imm_was"].value_or(0u), imm = p["imm"].value_or(0u);
+            auto job = std::find_if(jobs_.begin(), jobs_.end(), [&](const SegmentJob& j) { return j.seg.name == seg; });
+            char where[64];
+            std::snprintf(where, sizeof where, "patch %s 0x%08X: ", seg.c_str(), addr);
+            if (job == jobs_.end() || !job->seg.contains(addr) || addr % 4) {
+                error = std::string(where) + "no such segment or address";
+                return false;
+            }
+            uint32_t original = job->seg.word(addr);
+            if ((original & 0xFFFFu) != imm_was || imm > 0xFFFFu) {
+                error = std::string(where) + "the game's instruction does not have immediate `imm_was`";
+                return false;
+            }
+            job->seg.patches[addr] = (original & 0xFFFF0000u) | imm;
         }
     }
     return true;

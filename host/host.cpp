@@ -4,6 +4,9 @@
 #include <chrono>
 #include <condition_variable>
 #include <deque>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <mutex>
 #include <thread>
 #include <cstring>
@@ -12,6 +15,7 @@
 #include <utility>
 
 #include "dw3/disc_ref.h"
+#include "dw3/forms_table.h"
 #include "dw3/memcard.h"
 #include "dw3/recomp.h"
 #include "dw3/platform.h"
@@ -119,10 +123,12 @@ struct Host::Worker {
 struct Host::Impl {
     Config cfg;
     std::unique_ptr<DiscSource> disc_source;
+    std::unique_ptr<ModSectorSource> mod_source;  // the disc plus replaced files, when cfg.disc_mod is set
     std::array<std::vector<uint8_t>, 2> image;
     std::array<std::filesystem::path, 2> path;  // empty = memory only
     std::array<bool, 2> dirty{};
     std::array<int, 2> countdown{};
+    std::function<void(int)> on_flush;  // after a card file was written
     std::map<uint32_t, uint64_t> unmapped;  // physical address -> access count
 
     void log(const std::string& s) const {
@@ -159,6 +165,7 @@ struct Host::Impl {
         if (image[s].empty() || path[s].empty()) return;
         if (!memcard::save_card_file(path[s], image[s])) log("cannot write memory card " + platform::path_to_utf8(path[s]));
         dirty[s] = false;
+        if (on_flush) on_flush(slot);
     }
     void touch(int slot) {
         auto s = static_cast<std::size_t>(slot & 1);
@@ -248,7 +255,29 @@ std::unique_ptr<Host> Host::create(const Config& cfg, std::string& error) {
     Bios& bios = *h->bios_;
     Host* self = h.get();
     im.disc_source = std::make_unique<DiscSource>(*h->disc_);
-    m.cdrom().set_disc(im.disc_source.get());
+    SectorSource* source = im.disc_source.get();
+    if (cfg.disc_mod && !cfg.disc_mod->empty()) {
+        im.mod_source = std::make_unique<ModSectorSource>(*im.disc_source, h->disc_->sector_count());
+        std::string mod_error = apply_disc_mod(*cfg.disc_mod, h->exe_, *im.mod_source);
+        if (!mod_error.empty()) {
+            error = "game file changes: " + mod_error;
+            return nullptr;
+        }
+        source = im.mod_source.get();
+    }
+    m.cdrom().set_disc(source);
+    {
+        std::vector<uint8_t> conditions;
+        if (auto f = game_file_index(*h->disc_, h->exe_, "AAA/PRO/STFGTREP.PRO"))
+            conditions = forms_table::original_conditions(read_game_file(*h->disc_, h->exe_, *f));
+        if (conditions.empty()) {
+            error = "digivolution conditions not found on the disc";
+            return nullptr;
+        }
+        static const std::vector<uint8_t> kNone[forms_table::kRookieCount];
+        forms_table::attach(m, cfg.disc_mod ? cfg.disc_mod->extra_forms : std::vector<uint8_t>{}, std::move(conditions),
+                            cfg.disc_mod ? cfg.disc_mod->extra_conditions : kNone);
+    }
     m.kernel_idle = [self]() { return self->bios_->host_depth() == 0; };
     m.spu().start(m.scheduler());  // timed sample generation (a periodic event; plain Machine tests stay quiet)
 
@@ -274,6 +303,22 @@ std::unique_ptr<Host> Host::create(const Config& cfg, std::string& error) {
             m.sio().attach_card(1, im.image[1]);
             im.log("memory card 2: " + platform::path_to_utf8(p2));
         }
+    }
+    if (cfg.card_mode == CardMode::Files && cfg.disc_mod && !cfg.disc_mod->extra_forms.empty() && !im.path[0].empty()) {
+        // Learned forms past the game's 44 slots are not in the game's save: keep them beside the card file.
+        std::filesystem::path ext = im.path[0];
+        ext += ".forms";
+        if (std::ifstream in(ext, std::ios::binary); in) {
+            std::vector<uint8_t> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            forms_table::load_extension(m, data);
+        }
+        Machine* mp = &m;
+        im.on_flush = [mp, ext](int slot) {
+            if (slot != 0) return;
+            auto data = forms_table::save_extension(*mp);
+            std::ofstream out(ext, std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+        };
     }
     if (cfg.card_mode == CardMode::Files) {
         m.sio().on_card_write = [self](int slot, uint32_t) { self->impl_->touch(slot); };
@@ -378,6 +423,7 @@ void Host::apply(std::span<const uint8_t> payload) {
     }
     machine_->io(s);
     bios_->io(s);
+    forms_table::install(*machine_);
 }
 
 void Host::save_state(std::function<void(std::vector<uint8_t>, const std::string&)> done) {
@@ -488,6 +534,7 @@ RunResult Host::run(std::function<void(uint64_t frame)> frame_hook) {
                     machine_->resume();
                 } else {
                     uint32_t entry = bios_->load_exe(exe_);
+                    forms_table::install(*machine_);
                     bios_->run(entry);
                 }
                 break;

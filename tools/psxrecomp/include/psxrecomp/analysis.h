@@ -21,10 +21,14 @@ struct CodeSegment {
     std::string name;
     uint32_t base = 0;
     std::vector<uint8_t> bytes;
+    // Instructions recompiled differently from what is in `bytes` (config [[patch]]), by address. The game's RAM
+    // keeps the original words, so overlay identification (hashes, distinguishing words) uses word().
+    std::map<uint32_t, uint32_t> patches;
 
     uint32_t end() const { return base + static_cast<uint32_t>(bytes.size()); }
     bool contains(uint32_t addr) const { return addr >= base && addr < end(); }
     uint32_t word(uint32_t addr) const;  // 0 if out of range
+    uint32_t code(uint32_t addr) const;  // the instruction to recompile at `addr`: word() unless patched
 };
 
 struct JumpTable {

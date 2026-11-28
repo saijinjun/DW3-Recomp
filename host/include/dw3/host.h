@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "dw3/bios.h"
+#include "dw3/disc_mod.h"
 #include "dw3/game_module.h"
 #include "dw3/machine.h"
 #include "psxdisc/disc.h"
@@ -42,6 +43,8 @@ struct Config {
     bool trace_bios = false;
     uint32_t trace_lo = 0, trace_hi = 0;  // bus I/O trace range (physical addresses), 0/0 = off
     std::function<void(const std::string&)> log;  // diagnostics (optional)
+    // Game files replaced on this device (see disc_mod.h); null = the disc as it is.
+    std::shared_ptr<const DiscMod> disc_mod;
 };
 
 // Thrown by Host::stop() to unwind out of the game.

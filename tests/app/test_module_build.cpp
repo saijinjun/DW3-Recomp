@@ -188,3 +188,19 @@ TEST(ModuleBuild, CancelBeforeStartReportsCancelled) {
     EXPECT_TRUE(fake.commands.empty());
     fs::remove_all(data);
 }
+
+#if !defined(_WIN32)
+#include "process_runner.h"
+TEST(ProcessRunner, PosixRunnerReportsExitCodesAndOutput) {
+    std::atomic<bool> cancel{false};
+    EXPECT_EQ(dw3setup::run_process_posix({"/bin/sh", "-c", "exit 0"}, cancel), 0);
+    EXPECT_EQ(dw3setup::run_process_posix({"/bin/sh", "-c", "echo oops >&2; exit 3"}, cancel), 3);
+    EXPECT_NE(dw3setup::last_process_detail().find("oops"), std::string::npos);
+    EXPECT_EQ(dw3setup::run_process_posix({"/nonexistent/compiler"}, cancel), dw3setup::kProcessNotStarted);
+    EXPECT_NE(dw3setup::last_process_detail().find("could not start"), std::string::npos);
+}
+TEST(ProcessRunner, PosixRunnerCanBeCancelled) {
+    std::atomic<bool> cancel{true};
+    EXPECT_EQ(dw3setup::run_process_posix({"/bin/sh", "-c", "sleep 30"}, cancel), dw3setup::kProcessCancelled);
+}
+#endif

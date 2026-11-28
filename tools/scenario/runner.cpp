@@ -1,6 +1,6 @@
 // dw3scenario: headless in-game scenario runner.
 //
-//   dw3scenario <file.toml> [--disc PATH] [--game-dir DIR] [--state-dir DIR] [--record] [--out DIR] [--wav PATH] [--no-xa] [--watch ADDR[:SIZE]]... [--dump FRAME:PATH]...
+//   dw3scenario <file.toml> [--disc PATH] [--game-dir DIR] [--state-dir DIR] [--record] [--out DIR] [--wav PATH] [--no-xa] [--more-digimon] [--watch ADDR[:SIZE]]... [--dump FRAME:PATH]...
 //
 // Boots the recompiled game with the scenario's scripted pad on port 1 (no window, no SDL, uncapped), evaluates
 // every check at its frame and writes BMPs of the display to <out>/<name>/<at>_<label>.bmp for checks with
@@ -11,7 +11,8 @@
 // real and script frame, for finding the addresses that [[wait]] and [[check]] conditions use. --watch
 // *PTR+OFFSET[:SIZE] follows the pointer word at PTR first (like `via` in a ram condition). --dump FRAME:PATH
 // writes the 2 MiB of main RAM to PATH once the script reaches FRAME (repeatable), for diffing game states; a PATH ending
-// in .bmp writes the whole 1024x512 VRAM as an image instead.
+// in .bmp writes the whole 1024x512 VRAM as an image instead. --more-digimon builds the extra partner forms from the disc
+// (host/include/dw3/digipool.h), lists them and serves the changed files; save states made with it are separate.
 // [[savestate]] / [[loadstate]] / start_state entries (see scenario.h) read and write save states under --state-dir
 // (default game/audit/states); relative state paths are resolved against it.
 //
@@ -34,6 +35,7 @@
 #include <vector>
 
 #include "dw3/host.h"
+#include "dw3/digipool.h"
 #include "dw3/hw_renderer.h"
 #include "dw3/recomp.h"
 #include "dw3/state.h"
@@ -69,6 +71,8 @@ struct Options {
     int stats_width = 1920, stats_height = 1080;  // --frame-stats-size WxH: the output size drawn for the stats
     int64_t frames_from = 0, frames_to = -1, frames_step = 1;  // --gpu-frames FROM:TO[:STEP]:DIR: rendered frames in that range of emulated frames as BMPs
     std::string frames_dir;
+    std::string card_out;  // --card-out PATH: write the memory card in slot 1 at the end of the run
+    bool more_digimon = false;  // --more-digimon: serve the extra partner forms built from the disc (digipool.h)
     bool no_xa = false;  // --no-xa: drop XA-ADPCM sectors (isolates SPU voice output when auditing)
 };
 
@@ -354,6 +358,8 @@ int main(int argc, char** argv) {
         else if (a == "--record") opt.record = true;
         else if (a == "--wav" && i + 1 < argc) opt.wav = argv[++i];
         else if (a == "--no-xa") opt.no_xa = true;
+        else if (a == "--more-digimon") opt.more_digimon = true;
+        else if (a == "--card-out" && i + 1 < argc) opt.card_out = argv[++i];
         else if (a == "--setting" && i + 1 < argc) opt.settings.push_back(argv[++i]);
         else if (a == "--gpu") opt.gpu = true;
         else if (a == "--sync-replacements") opt.sync_replacements = true;
@@ -410,12 +416,12 @@ int main(int argc, char** argv) {
         }
         else if (!a.empty() && a[0] != '-' && opt.file.empty()) opt.file = a;
         else {
-            std::fprintf(stderr, "usage: dw3scenario <file.toml> [--setting ID=VALUE] [--gpu] [--frame-stats] [--frame-stats-size WxH] [--sync-replacements] [--disc PATH] [--game-dir DIR] [--state-dir DIR] [--record] [--out DIR] [--wav PATH] [--no-xa] [--watch ADDR[:SIZE]] [--dump FRAME:PATH]\n");
+            std::fprintf(stderr, "usage: dw3scenario <file.toml> [--setting ID=VALUE] [--gpu] [--frame-stats] [--frame-stats-size WxH] [--sync-replacements] [--disc PATH] [--game-dir DIR] [--state-dir DIR] [--record] [--out DIR] [--wav PATH] [--no-xa] [--more-digimon] [--watch ADDR[:SIZE]] [--dump FRAME:PATH]\n");
             return 2;
         }
     }
     if (opt.file.empty()) {
-        std::fprintf(stderr, "usage: dw3scenario <file.toml> [--disc PATH] [--game-dir DIR] [--state-dir DIR] [--record] [--out DIR] [--wav PATH] [--no-xa] [--watch ADDR[:SIZE]] [--dump FRAME:PATH]\n");
+        std::fprintf(stderr, "usage: dw3scenario <file.toml> [--disc PATH] [--game-dir DIR] [--state-dir DIR] [--record] [--out DIR] [--wav PATH] [--no-xa] [--more-digimon] [--watch ADDR[:SIZE]] [--dump FRAME:PATH]\n");
         return 2;
     }
     sc::Scenario scenario;
@@ -459,6 +465,20 @@ int main(int argc, char** argv) {
         return 2;
     }
     cfg.log = [](const std::string& s) { std::fprintf(stderr, "%s\n", s.c_str()); };
+    if (opt.more_digimon) {
+        dw3::host::digipool::Build pool;
+        std::string perr;
+        if (!dw3::host::digipool::build(opt.disc, pool, perr)) {
+            std::fprintf(stderr, "more digimon: %s\n", perr.c_str());
+            return 2;
+        }
+        std::fprintf(stderr, "more digimon: %zu forms\n", pool.forms.size());
+        for (const auto& f : pool.forms)
+            std::fprintf(stderr, "  form 0x%x (enemy 0x%x) name %u file %u scale %.2f\n", f.form_id, f.enemy_id, f.name_index,
+                         f.model_file, f.scale);
+        for (const auto& n : pool.notes) std::fprintf(stderr, "  skipped %s\n", n.c_str());
+        cfg.disc_mod = std::make_shared<dw3::host::DiscMod>(std::move(pool.mod));
+    }
     std::string error;
     std::unique_ptr<dw3::host::Host> host;
     std::unique_ptr<dw3::HwRenderer> hw;  // after the host so it goes first; null: the software rasterizer draws
@@ -975,6 +995,14 @@ int main(int argc, char** argv) {
         std::printf("  frame-stats replacement images loaded %llu, %.1f ms total on the render thread, GPU waits %.1f ms, submits %.1f ms\n",
                     static_cast<unsigned long long>(hw->stats().replacement_loads), static_cast<double>(hw->stats().replacement_ns) / 1e6,
                     static_cast<double>(hw->stats().gpu_wait_ns) / 1e6, static_cast<double>(hw->stats().submit_ns) / 1e6);
+    if (!opt.card_out.empty() && host) {
+        const auto& card = host->card_image(0);
+        if (std::FILE* f = std::fopen(opt.card_out.c_str(), "wb")) {
+            std::fwrite(card.data(), 1, card.size(), f);
+            std::fclose(f);
+            std::printf("  wrote memory card (%zu bytes) to %s\n", card.size(), opt.card_out.c_str());
+        }
+    }
     std::printf("%s %s: %d passed, %d failed, %lld frames in %.1fs\n", ok ? "PASS" : "FAIL", scenario.name.c_str(),
                 total.pass, total.fail, static_cast<long long>(last_frame), secs);
     return ok ? 0 : 1;

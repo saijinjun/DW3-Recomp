@@ -61,7 +61,7 @@ public:
     std::string run();
 
 private:
-    Instruction at(uint32_t pc) const { return decode(ec_.seg->word(pc), pc); }
+    Instruction at(uint32_t pc) const { return decode(ec_.seg->code(pc), pc); }
     bool in_func(uint32_t a) const { return std::binary_search(f_.insns.begin(), f_.insns.end(), a); }
     bool is_local_target(uint32_t t) const {
         return t >= f_.start && in_func(t) && !(t != f_.start && ec_.local->count(t));

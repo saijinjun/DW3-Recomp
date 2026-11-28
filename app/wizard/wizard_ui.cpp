@@ -144,9 +144,9 @@ public:
     WizardState& state() { return state_; }
 
     // Builds one frame of the window.
-    void frame(float width, float height) {
+    void frame(float x, float y, float width, float height) {
         pump();
-        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowPos(ImVec2(x, y));
         ImGui::SetNextWindowSize(ImVec2(width, height));
         ImGui::Begin("##setup", nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
@@ -404,6 +404,11 @@ private:
         ImGui::TextWrapped("Disc: %s", state_.disc_path().c_str());
         ImGui::TextWrapped("HD backgrounds: %s", hd_done_ ? "installed and turned on" : "not set up");
         ImGui::Spacing();
+        if (ImGui::Button("Import a memory card (optional)")) open_card_dialog();
+        if (!card_message_.empty()) colored_wrapped(card_ok_ ? kGood : kBad, card_message_);
+        colored_wrapped(kMuted, "A 128 KB PlayStation memory card image (.mcd, .mcr, .srm or .mc) with a Digimon World 3 save. It becomes memory card 1; "
+                                "a card you already had is kept as slot1.mcd.bak.");
+        ImGui::Spacing();
 #if defined(DW3_ANDROID)
         colored_wrapped(kMuted, "Video, audio and gameplay options are in the settings menu of the game. Turning on HD BG there offers the HD backgrounds again at the next start.");
 #else
@@ -490,8 +495,48 @@ private:
         SDL_ShowOpenFileDialog(on_file_chosen, &dialog_, window_, filters, 2, nullptr, kImportDisc);
     }
 
+    void open_card_dialog() {
+        static const SDL_DialogFileFilter filters[] = {{"Memory card images", "mcd;mcr;srm;mc;bin"}, {"All files", "*"}};
+        SDL_ShowOpenFileDialog(on_file_chosen, &card_dialog_, window_, filters, 2, nullptr, false);
+    }
+
+    // Copies a picked memory card image to memory card 1 (kept apart: the picked path may be a content:// address).
+    void import_card(const std::string& source) {
+        card_ok_ = false;
+        size_t size = 0;
+        void* data = SDL_LoadFile(source.c_str(), &size);
+        if (!data) {
+            card_message_ = std::string("Cannot read that file: ") + SDL_GetError();
+            return;
+        }
+        const auto* bytes = static_cast<const uint8_t*>(data);
+        const bool valid = size == 131072 && bytes[0] == 'M' && bytes[1] == 'C';
+        if (!valid) {
+            card_message_ = "That is not a raw 128 KB memory card image (a .gme, .vmp or .psv file has to be converted first).";
+        } else {
+            const fs::path dir = dw3::platform::user_data_dir() / "memcards";
+            std::error_code ec;
+            fs::create_directories(dir, ec);
+            const fs::path target = dir / "slot1.mcd";
+            if (fs::exists(target, ec)) fs::copy_file(target, dir / "slot1.mcd.bak", fs::copy_options::overwrite_existing, ec);
+            std::ofstream out(target, std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char*>(bytes), static_cast<std::streamsize>(size));
+            out.close();
+            card_ok_ = out.good();
+            card_message_ = card_ok_ ? "Memory card 1 imported. Start the game and choose Continue." : "Writing the memory card failed.";
+        }
+        SDL_free(data);
+    }
+
     // Per-frame housekeeping: the file picker's answer and the worker's progress.
     void pump() {
+        {
+            std::lock_guard lock(card_dialog_.mutex);
+            if (card_dialog_.has_path) {
+                import_card(card_dialog_.path);
+                card_dialog_.has_path = false;
+            }
+        }
         {
             std::lock_guard lock(dialog_.mutex);
             if (dialog_.has_path) {
@@ -655,6 +700,9 @@ private:
     DownloadPlan plan_;
     char path_buffer_[1024]{};
     DialogResult dialog_;
+    DialogResult card_dialog_;
+    std::string card_message_;
+    bool card_ok_ = false;
     std::thread import_;
     std::mutex import_mutex_;
     bool importing_ = false, import_done_ = false;
@@ -782,6 +830,9 @@ WizardOutcome run_setup_wizard(const WizardLaunch& launch) {
     io.Fonts->AddFontFromMemoryTTF(const_cast<uint8_t*>(dw3::wizard::roboto_medium), static_cast<int>(dw3::wizard::roboto_medium_size), 20.0f,
                                    &font_config);
     apply_theme();
+#if defined(DW3_ANDROID)
+    io.FontGlobalScale = 1.5f;  // phone screens are dense: the 20 px font is small on them
+#endif
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
 
@@ -800,7 +851,11 @@ WizardOutcome run_setup_wizard(const WizardLaunch& launch) {
             ImGui_ImplSDLRenderer3_NewFrame();
             ImGui_ImplSDL3_NewFrame();
             ImGui::NewFrame();
-            ui.frame(io.DisplaySize.x, io.DisplaySize.y);
+            // The part of the window that system bars, cut-outs and rounded corners leave visible (the whole window on a computer).
+            SDL_Rect safe{0, 0, static_cast<int>(io.DisplaySize.x), static_cast<int>(io.DisplaySize.y)};
+            if (!SDL_GetWindowSafeArea(window, &safe) || safe.w <= 0 || safe.h <= 0)
+                safe = {0, 0, static_cast<int>(io.DisplaySize.x), static_cast<int>(io.DisplaySize.y)};
+            ui.frame(static_cast<float>(safe.x), static_cast<float>(safe.y), static_cast<float>(safe.w), static_cast<float>(safe.h));
             ImGui::Render();
             // ImGui lays out in window points; a high pixel density window (Retina) has more pixels than points.
             SDL_SetRenderScale(renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);

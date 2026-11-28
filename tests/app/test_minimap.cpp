@@ -81,12 +81,11 @@ TEST(Minimap, ScalesIntoThePanelAndMarksTheView) {
     // The dot sits where the party stands: here the middle of the view, in the right half of the map, upper part.
     img = m.frame(library(), 0, 128, 0, 128, 96, 192, 48, 100);
     EXPECT_NE(m.serial(), serial);
-    const int dot_x = img->w * 3 / 4, dot_y = img->h * 96 / 2 / 128;
-    EXPECT_EQ(at(*img, dot_x, dot_y), 0xFF2850F0u);
+    EXPECT_EQ(at(*img, m.map_x(192), m.map_y(48)), 0xFF2850F0u);
     // At the edge of a map the camera stops and the party walks off the middle of the view; the dot follows the party.
-    img = m.frame(library(), 0, 0, 0, 128, 96, 16, 80, 100);  // 2 pixels of border, 96 / 256 panel pixels per map pixel
-    EXPECT_EQ(at(*img, 2 + 6, 2 + 30), 0xFF2850F0u);
-    EXPECT_NE(at(*img, 2 + 24, 2 + 18), 0xFF2850F0u);  // the middle of the view
+    img = m.frame(library(), 0, 0, 0, 128, 96, 16, 80, 100);
+    EXPECT_EQ(at(*img, m.map_x(16), m.map_y(80)), 0xFF2850F0u);
+    EXPECT_NE(at(*img, m.map_x(64), m.map_y(48)), 0xFF2850F0u);  // the middle of the view
     m.frame(library(), 7, 0, 0, 128, 96, 64, 48, 100);
     m.wait();
     EXPECT_EQ(m.frame(library(), 7, 0, 0, 128, 96, 64, 48, 100), nullptr);
