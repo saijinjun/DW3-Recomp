@@ -144,9 +144,9 @@ public:
     WizardState& state() { return state_; }
 
     // Builds one frame of the window.
-    void frame(float width, float height) {
+    void frame(float x, float y, float width, float height) {
         pump();
-        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowPos(ImVec2(x, y));
         ImGui::SetNextWindowSize(ImVec2(width, height));
         ImGui::Begin("##setup", nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
@@ -782,6 +782,9 @@ WizardOutcome run_setup_wizard(const WizardLaunch& launch) {
     io.Fonts->AddFontFromMemoryTTF(const_cast<uint8_t*>(dw3::wizard::roboto_medium), static_cast<int>(dw3::wizard::roboto_medium_size), 20.0f,
                                    &font_config);
     apply_theme();
+#if defined(DW3_ANDROID)
+    io.FontGlobalScale = 1.5f;  // phone screens are dense: the 20 px font is small on them
+#endif
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
 
@@ -800,7 +803,11 @@ WizardOutcome run_setup_wizard(const WizardLaunch& launch) {
             ImGui_ImplSDLRenderer3_NewFrame();
             ImGui_ImplSDL3_NewFrame();
             ImGui::NewFrame();
-            ui.frame(io.DisplaySize.x, io.DisplaySize.y);
+            // The part of the window that system bars, cut-outs and rounded corners leave visible (the whole window on a computer).
+            SDL_Rect safe{0, 0, static_cast<int>(io.DisplaySize.x), static_cast<int>(io.DisplaySize.y)};
+            if (!SDL_GetWindowSafeArea(window, &safe) || safe.w <= 0 || safe.h <= 0)
+                safe = {0, 0, static_cast<int>(io.DisplaySize.x), static_cast<int>(io.DisplaySize.y)};
+            ui.frame(static_cast<float>(safe.x), static_cast<float>(safe.y), static_cast<float>(safe.w), static_cast<float>(safe.h));
             ImGui::Render();
             // ImGui lays out in window points; a high pixel density window (Retina) has more pixels than points.
             SDL_SetRenderScale(renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
