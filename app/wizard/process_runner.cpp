@@ -7,6 +7,9 @@
 namespace dw3setup {
 
 int run_process(const std::vector<std::string>& command, const std::atomic<bool>& cancel) {
+#if defined(DW3_ANDROID)
+    return run_process_posix(command, cancel);
+#else
     std::vector<const char*> argv;
     for (const std::string& a : command) argv.push_back(a.c_str());
     argv.push_back(nullptr);
@@ -53,6 +56,7 @@ int run_process(const std::vector<std::string>& command, const std::atomic<bool>
         SDL_Log("process exited with %d: %s", exit_code, tail.c_str());
     }
     return exit_code;
+#endif
 }
 
 }  // namespace dw3setup

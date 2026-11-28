@@ -16,6 +16,9 @@ add_library(dw3wizard_core STATIC
     wizard_state.cpp
     hd_install.cpp
     module_build.cpp)
+if(NOT WIN32)
+    target_sources(dw3wizard_core PRIVATE process_posix.cpp)
+endif()
 target_include_directories(dw3wizard_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(dw3wizard_core PUBLIC dw3runtime psxdisc psxrecomp_core PRIVATE miniz)
 dw3_target_defaults(dw3wizard_core)

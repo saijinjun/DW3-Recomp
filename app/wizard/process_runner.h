@@ -30,6 +30,10 @@ inline std::string last_process_detail() {
     return process_detail_storage();
 }
 
+// The same with posix_spawn, for platforms where SDL cannot start processes (Android: SDL builds no process support there).
+// Not available on Windows.
+int run_process_posix(const std::vector<std::string>& command, const std::atomic<bool>& cancel);
+
 int run_process(const std::vector<std::string>& command, const std::atomic<bool>& cancel);
 
 }  // namespace dw3setup
