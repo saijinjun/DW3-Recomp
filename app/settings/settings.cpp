@@ -178,6 +178,8 @@ const SettingInfo kSettings[] = {
     {"controls.compare", "Original/preset comparison binding", "Keyboard key and gamepad button for Original/preset comparison, written as key|button (for example Z|South). Reserved keys cannot be moved.",
      Group::Controls, Type::String, Apply::Live, 0, 0, {}, true, DW3_FIELD(controls.bindings[19])},
 
+    {"system.more_digimon", "More Digimon", "Makes the enemy-only Digimon on your disc usable as partner forms (built on this device from your disc at start; uses a separate set of save states).",
+     Group::System, Type::Bool, Apply::Restart, 0, 0, {}, false, DW3_FIELD(system.more_digimon)},
     {"system.memcards", "Memory cards", "Insert memory cards; off means games see no card.",
      Group::System, Type::Bool, Apply::Restart, 0, 0, {}, false, DW3_FIELD(system.memcards)},
     {"system.memcard1", "Memory card 1", "Path of the slot 1 card image; empty uses <user data>/memcards/slot1.mcd.",

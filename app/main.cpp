@@ -97,6 +97,7 @@
 
 #include "audio_out.h"
 #include "dw3/recomp.h"
+#include "dw3/digipool.h"
 #include "dw3/host.h"
 #include "dw3/platform.h"
 #include "auto_battle.h"
@@ -320,6 +321,7 @@ int main(int argc, char** argv) {
                                             {"gameplay.minimap", "true"},
                                             {"gameplay.text_speed", "fast"},
                                             {"system.fast_forward_speed", "4x"},
+                                            {"system.more_digimon", "true"},
                                             {"system.resume", "true"}})
                 if (!dw3app::set_text(stored, *dw3app::find_setting(id), value, err)) SDL_Log("settings: %s", err.c_str());
 #endif
@@ -485,6 +487,16 @@ int main(int argc, char** argv) {
     cfg.module_path = !opt.module.empty() ? opt.module : dw3::platform::path_to_utf8(prepared_module);
     cfg.card_mode = active.system.memcards ? dw3::host::CardMode::Files : dw3::host::CardMode::None;
     cfg.card_path = {active.system.memcard1, active.system.memcard2};
+    if (active.system.more_digimon) {
+        dw3::host::digipool::Build pool;
+        std::string perr;
+        if (dw3::host::digipool::build(*disc, pool, perr)) {
+            SDL_Log("more digimon: %zu forms", pool.forms.size());
+            cfg.disc_mod = std::make_shared<dw3::host::DiscMod>(std::move(pool.mod));
+        } else {
+            SDL_Log("more digimon: %s", perr.c_str());
+        }
+    }
     cfg.trace_bios = opt.trace_bios;
     cfg.trace_lo = opt.trace_lo;
     cfg.trace_hi = opt.trace_hi;

@@ -76,6 +76,7 @@ struct Settings {
         bool operator==(const Controls&) const = default;
     } controls;
     struct System {
+        bool more_digimon = false;   // serve the extra partner forms built from the disc (needs a restart)
         bool memcards = true;        // false: games see no card
         std::string memcard1;        // empty selects <user data dir>/memcards/slot1.mcd
         std::string memcard2;        // empty selects <user data dir>/memcards/slot2.mcd
